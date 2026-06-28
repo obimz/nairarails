@@ -1,8 +1,18 @@
 import crypto from 'crypto';
 
 export async function webhookRoutes(fastify) {
+  // Nomba (and webhook providers in general) may POST with content-types other than
+  // application/json, or omit the header entirely. Parse the raw string as JSON so
+  // Fastify never returns 415 and request.body is always a plain object.
+  fastify.addContentTypeParser('*', { parseAs: 'string' }, (_req, body, done) => {
+    try {
+      done(null, JSON.parse(body));
+    } catch {
+      done(null, {});
+    }
+  });
+
   fastify.post('/webhooks/nomba', {
-    // rawBody needed later for HMAC signature verification
     config: { rawBody: true },
   }, async (request, reply) => {
     fastify.log.info({
