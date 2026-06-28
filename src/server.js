@@ -2,6 +2,7 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rawBody from 'fastify-raw-body';
 
 import { webhookRoutes } from './routes/webhooks.js';
 import { orderRoutes } from './routes/orders.js';
@@ -20,6 +21,7 @@ const fastify = Fastify({
 });
 
 // ─── Plugins ─────────────────────────────────────────────────────────────────
+await fastify.register(rawBody, { global: false }); // opt-in per route via config.rawBody
 await fastify.register(helmet);
 await fastify.register(cors, {
   origin: process.env.FRONTEND_URL || '*',
