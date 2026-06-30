@@ -1,9 +1,9 @@
-import { Router } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
 import { logger } from "../lib/logger.js";
 import { AppError } from "../middleware/errorHandler.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 const ExceptionQuerySchema = z.object({
   type: z.enum(["underpayment", "overpayment", "unmatched"]).optional(),

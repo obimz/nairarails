@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
 import { CreateOrderRequestSchema } from "@nairarails/shared-types";
 import { calculateSplits } from "@nairarails/webhook-core";
@@ -6,7 +6,7 @@ import { validate } from "../middleware/validate.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { logger } from "../lib/logger.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // ─── Query schema for GET /orders ─────────────────────────────────────────────
 const ListOrdersQuerySchema = z.object({

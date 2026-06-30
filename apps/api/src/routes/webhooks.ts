@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, type Router as ExpressRouter, Request, Response } from "express";
 import {
   verifyNombaWebhook,
   classify,
@@ -12,7 +12,7 @@ import {
 } from "@nairarails/shared-types";
 import { logger } from "../lib/logger.js";
 
-const router: Router = Router();
+const router: ExpressRouter = Router();
 
 /**
  * POST /api/v1/webhooks/nomba
