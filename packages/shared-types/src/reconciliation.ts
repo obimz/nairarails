@@ -26,8 +26,8 @@ export const SplitResultSchema = z.object({
   account_number: z.string(),
   bank_code: z.string(),
   percentage: z.number().int().min(1).max(100),
-  /** Calculated amount in kobo */
-  amount_kobo: z.number().int().nonnegative().nullable(),
+  /** Calculated payout in kobo — null until the split is executed */
+  amount_paid_kobo: z.number().int().nonnegative().nullable(),
   status: SplitStatusEnum,
   /** Nomba transfer reference, set once the payout is initiated */
   nomba_transfer_ref: z.string().nullable(),

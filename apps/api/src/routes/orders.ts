@@ -119,9 +119,9 @@ router.get("/orders/:order_ref/reconciliation", async (req, res, next) => {
       excess_kobo:             0,
       splits_executed:         false,
       splits: [
-        { party: "seller",   percentage: 85, amount_kobo: null, status: "blocked", nomba_transfer_ref: null },
-        { party: "platform", percentage: 10, amount_kobo: null, status: "blocked", nomba_transfer_ref: null },
-        { party: "rider",    percentage: 5,  amount_kobo: null, status: "blocked", nomba_transfer_ref: null },
+        { party: "seller",   percentage: 85, amount_paid_kobo: null, status: "blocked", nomba_transfer_ref: null },
+        { party: "platform", percentage: 10, amount_paid_kobo: null, status: "blocked", nomba_transfer_ref: null },
+        { party: "rider",    percentage: 5,  amount_paid_kobo: null, status: "blocked", nomba_transfer_ref: null },
       ],
       audit_trail: [
         { event: "va_created",       timestamp: "2026-06-28T09:00:00.000Z" },
