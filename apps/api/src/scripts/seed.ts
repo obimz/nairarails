@@ -3,10 +3,8 @@
 // Inserts 5 orders across all statuses so the dashboard is never empty during a demo,
 // even if live webhook timing doesn't cooperate in front of judges.
 //
-// Run with: npx tsx src/scripts/seed.ts
+// Run with: npx tsx --env-file=../../.env src/scripts/seed.ts
 // Safe to run multiple times — uses upsert so it won't create duplicates.
-
-import "dotenv/config";
 import { prisma } from "../lib/prisma.js";
 
 const SEED_ORDERS = [

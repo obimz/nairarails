@@ -1,13 +1,11 @@
 // apps/api/src/scripts/test-nomba.ts
 // Manual Phase 4 verification script — NOT part of the demo flow, NOT committed as a route.
-// Run with: npx tsx src/scripts/test-nomba.ts
+// Run with: npx tsx --env-file=../../.env src/scripts/test-nomba.ts
 //
 // Phase 4 checkpoint (both must pass before proceeding to Phase 5):
 //   1. createVirtualAccount returns a real NUBAN
 //   2. Send a test transfer to that NUBAN (Wema Bank 0000000000 per Training.md)
 //      and confirm the webhook stub receives it
-
-import "dotenv/config";
 import { getAccessToken, createVirtualAccount } from "../integrations/nombaClient.js";
 
 async function main() {
