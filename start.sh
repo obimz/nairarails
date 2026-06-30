@@ -1,11 +1,11 @@
 #!/bin/sh
 # start.sh — Railway entrypoint
-# 1. Apply any pending migrations (safe to run on every deploy — skips already-applied ones)
-# 2. Start the API server
+# Uses the locally installed prisma binary (pinned to v6 via package.json)
+# instead of npx which would download the latest version at runtime.
 set -e
 
 echo "→ Running database migrations..."
-npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+./node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma
 
 echo "→ Starting NairaRails API..."
 node apps/api/dist/server.js
