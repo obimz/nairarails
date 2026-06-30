@@ -1,0 +1,32 @@
+{
+  "name": "@nairarails/webhook-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pure, server-agnostic reconciliation and webhook-verification logic for NairaRails",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc -b --dry",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@nairarails/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@nairarails/tsconfig": "workspace:*",
+    "@types/node": "^22.15.30",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}
