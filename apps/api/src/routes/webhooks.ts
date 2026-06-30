@@ -4,11 +4,11 @@ import {
   classify,
   shortfallKobo,
   excessKobo,
-  calculateSplits,
 } from "@nairarails/webhook-core";
 import {
   NombaWebhookEnvelopeSchema,
   NOMBA_SIGNATURE_HEADER,
+  NOMBA_TIMESTAMP_HEADER,
 } from "@nairarails/shared-types";
 import { logger } from "../lib/logger.js";
 
@@ -17,142 +17,189 @@ const router: ExpressRouter = Router();
 /**
  * POST /api/v1/webhooks/nomba
  *
- * ⚠️  This route is mounted with express.raw({ type: "*\/*" }) in server.ts.
- *     req.body is a Buffer here — do NOT parse it before calling verifyNombaWebhook.
- *     The raw bytes must be intact for the HMAC check to pass.
+ * ⚠️  Mounted with express.raw({ type: "*\/*" }) in server.ts so req.body is a
+ *     raw Buffer. We parse JSON manually AFTER signature verification.
  *
- * Flow:
- *   1. Verify HMAC-SHA256 signature — reject 401 if invalid (fail-closed)
- *   2. Parse the JSON body
- *   3. Idempotency: check if requestId was already processed
- *   4. Persist the raw event (webhook_events table — Phase 3)
- *   5. Classify the payment (paid / underpayment / overpayment / unmatched)
- *   6. Update order status (Phase 3)
- *   7. Execute splits if status is "paid" (Phase 4)
- *   8. Always respond 200 — Nomba will retry on non-2xx
+ * Confirmed real Nomba signature algorithm:
+ *   HMAC-SHA256( colon-joined fields, secret ) → base64
+ *   Fields: event_type:requestId:userId:walletId:transactionId:type:time:responseCode:timestamp
+ *
+ * Real event to act on: event_type === "payment_success" && transaction.type === "vact_transfer"
+ * Order reference:      data.transaction.aliasAccountReference  (set as accountRef on VA creation)
+ * Sender info:          data.customer.accountNumber / bankCode / senderName
  */
 router.post(
   "/webhooks/nomba",
-  // express.raw is applied at server level for this path — see server.ts
   async (req: Request, res: Response): Promise<void> => {
     const rawBody = req.body as Buffer;
 
-    // ── 1. Signature verification ─────────────────────────────────────────────
-    const signatureHeader = req.headers[NOMBA_SIGNATURE_HEADER];
-    const secret = process.env["NOMBA_WEBHOOK_SECRET"];
-
-    if (secret) {
-      // Secret is configured — enforce signature verification (production behaviour).
-      if (
-        typeof signatureHeader !== "string" ||
-        !verifyNombaWebhook(rawBody, signatureHeader, secret)
-      ) {
-        logger.warn(
-          { path: req.path, hasHeader: !!signatureHeader },
-          "Webhook rejected: invalid signature"
-        );
-        res.status(401).json({
-          error: { code: "INVALID_WEBHOOK_SIGNATURE", message: "Signature mismatch" },
-        });
-        return;
-      }
-    } else {
-      // ⚠️  No secret configured — skipping signature verification.
-      // UNCOMMENT the block above (and remove this else branch) once you have
-      // your NOMBA_WEBHOOK_SECRET and are ready to enforce verification.
-      logger.warn(
-        { path: req.path },
-        "NOMBA_WEBHOOK_SECRET not set — signature verification DISABLED (dev/testing only)"
-      );
-    }
-
-    // ── 2. Parse body ─────────────────────────────────────────────────────────
+    // ── 1. Parse body first (needed to extract fields for signature check) ────
     let envelope: ReturnType<typeof NombaWebhookEnvelopeSchema.parse>;
     try {
       const parsed = JSON.parse(rawBody.toString("utf8")) as unknown;
       envelope = NombaWebhookEnvelopeSchema.parse(parsed);
     } catch (err) {
       logger.warn({ err }, "Webhook rejected: invalid payload shape");
-      // Return 200 so Nomba doesn't retry a fundamentally malformed event.
+      // Return 200 — Nomba must not retry a fundamentally malformed payload.
       res.status(200).json({ status: "ignored", reason: "unrecognised_shape" });
       return;
     }
 
     const { requestId, event_type, data } = envelope;
-    const txn = data.transaction;
+    const { transaction: txn, merchant, customer } = data;
+
+    // ── 2. Signature verification — always enforced, no bypass ───────────────
+    const secret = process.env["NOMBA_WEBHOOK_SECRET"];
+
+    if (!secret) {
+      // Server misconfiguration — refuse all requests rather than silently accepting
+      // unsigned webhooks. Fix: add NOMBA_WEBHOOK_SECRET to your environment.
+      logger.error("NOMBA_WEBHOOK_SECRET is not set — refusing webhook request");
+      res.status(500).json({
+        error: { code: "INTERNAL_ERROR", message: "Webhook secret not configured" },
+      });
+      return;
+    }
+
+    const signatureHeader = req.headers[NOMBA_SIGNATURE_HEADER];
+    const timestamp       = req.headers[NOMBA_TIMESTAMP_HEADER];
+
+    if (typeof signatureHeader !== "string" || typeof timestamp !== "string") {
+      logger.warn({ path: req.path }, "Webhook rejected: missing signature headers");
+      res.status(401).json({
+        error: { code: "INVALID_WEBHOOK_SIGNATURE", message: "Missing signature headers" },
+      });
+      return;
+    }
+
+    const valid = verifyNombaWebhook(
+      {
+        event_type,
+        requestId,
+        userId:        merchant.userId,
+        walletId:      merchant.walletId,
+        transactionId: txn.transactionId,
+        type:          txn.type,
+        time:          txn.time,
+        responseCode:  txn.responseCode ?? "",
+        timestamp,
+      },
+      signatureHeader,
+      secret
+    );
+
+    if (!valid) {
+      logger.warn({ path: req.path, requestId }, "Webhook rejected: invalid signature");
+      res.status(401).json({
+        error: { code: "INVALID_WEBHOOK_SIGNATURE", message: "Signature mismatch" },
+      });
+      return;
+    }
 
     logger.info(
       {
         requestId,
         event_type,
-        transactionId: txn.transactionId,
-        amount_kobo: txn.transactionAmount,
-        merchantTxRef: txn.merchantTxRef,
+        transactionId:         txn.transactionId,
+        transactionType:       txn.type,
+        amount_kobo:           txn.transactionAmount,
+        aliasAccountReference: txn.aliasAccountReference,
       },
       "Nomba webhook received"
     );
 
     // ── 3. Idempotency ────────────────────────────────────────────────────────
-    // TODO (Phase 3): query webhook_events WHERE request_id = requestId.
-    // If a row exists, short-circuit here — the event was already handled.
-    // const existing = await db.webhookEvents.findByRequestId(requestId);
+    // TODO (Phase 3): check webhook_events WHERE request_id = requestId.
+    // If a row exists → already handled, return 200 immediately.
+    // const existing = await prisma.webhookEvent.findUnique({ where: { requestId } });
     // if (existing) {
     //   logger.info({ requestId }, "Duplicate webhook ignored");
     //   res.status(200).json({ status: "duplicate", requestId });
     //   return;
     // }
 
-    // ── 4. Persist event ──────────────────────────────────────────────────────
-    // TODO (Phase 3): INSERT INTO webhook_events (request_id, event_type, raw_payload)
-    // The unique constraint on request_id acts as a DB-level idempotency guard.
+    // ── 4. Persist raw event ──────────────────────────────────────────────────
+    // TODO (Phase 3): INSERT webhook_events (request_id, event_type, raw_payload)
+    // The unique DB constraint on request_id is the hard idempotency guarantee.
 
     // ── 5 & 6. Classify and update order ─────────────────────────────────────
-    // Only virtual_account.funded events carry a payment we need to reconcile.
-    if (event_type === "virtual_account.funded") {
-      const expectedKobo = 0; // TODO (Phase 3): fetch from orders WHERE virtual_account_number = txn.aliasAccountNumber
+    // Act only on virtual account funding events.
+    // Real Nomba event: event_type === "payment_success" + type === "vact_transfer"
+    if (event_type === "payment_success" && txn.type === "vact_transfer") {
+      // Order reference is aliasAccountReference — set as accountRef on VA creation.
+      const orderRef = txn.aliasAccountReference;
+
+      if (!orderRef) {
+        logger.warn({ requestId }, "payment_success has no aliasAccountReference — quarantining");
+        // TODO (Phase 3): insert into an unmatched/quarantine log
+        res.status(200).json({ status: "unmatched_quarantined", requestId });
+        return;
+      }
+
+      // TODO (Phase 3): fetch order by orderRef
+      // const order = await prisma.order.findUnique({ where: { orderRef } });
+      // if (!order) {
+      //   logger.warn({ requestId, orderRef }, "No order found — quarantining");
+      //   res.status(200).json({ status: "unmatched_quarantined", requestId });
+      //   return;
+      // }
+
+      const expectedKobo = 0; // TODO (Phase 3): order.expectedAmountKobo
       const receivedKobo = txn.transactionAmount;
 
       const classification = classify(expectedKobo, receivedKobo);
-      const shortfall = shortfallKobo(expectedKobo, receivedKobo);
-      const excess = excessKobo(expectedKobo, receivedKobo);
+      const shortfall      = shortfallKobo(expectedKobo, receivedKobo);
+      const excess         = excessKobo(expectedKobo, receivedKobo);
+
+      // Sender details for potential refund — from data.customer (not transaction)
+      const senderName    = customer?.senderName    ?? null;
+      const senderAccount = customer?.accountNumber ?? null;
+      const senderBank    = customer?.bankCode      ?? null;
 
       logger.info(
         {
           requestId,
-          merchantTxRef: txn.merchantTxRef,
+          orderRef,
           classification,
           expectedKobo,
           receivedKobo,
           shortfall,
           excess,
+          senderName,
+          senderAccount,
+          senderBank,
         },
         "Payment classified"
       );
 
-      // TODO (Phase 3): UPDATE orders SET status = classification WHERE ...
-      // TODO (Phase 3): INSERT INTO ledger_entries ...
+      // TODO (Phase 3): UPDATE orders SET status = classification,
+      //   received_amount_kobo = receivedKobo,
+      //   sender_account_number = senderAccount,
+      //   sender_bank_code = senderBank,
+      //   sender_name = senderName
+      //   WHERE order_ref = orderRef
+
+      // TODO (Phase 3): INSERT ledger_entry
 
       // ── 7. Execute splits on full payment ───────────────────────────────────
       if (classification === "paid") {
-        // TODO (Phase 3): fetch splits[] from the orders/splits tables
-        // const splits = await db.splits.findByOrderRef(orderRef);
+        // TODO (Phase 4):
+        // const splits = await prisma.split.findMany({ where: { orderRef } });
         // const allocations = calculateSplits(receivedKobo, splits);
         // for (const allocation of allocations) {
-        //   await nombaClient.lookupBankAccount(allocation.bank_code, allocation.account_number);
-        //   await nombaClient.transferToBank(allocation);
+        //   const { accountName } = await nombaClient.lookupBankAccount(allocation.bank_code, allocation.account_number);
+        //   await nombaClient.transferToBank({ ...allocation, accountName, merchantTxRef: `split_${orderRef}_${allocation.party}_${requestId}` });
         // }
-        logger.info({ requestId, receivedKobo }, "Splits would execute here (Phase 4)");
+        logger.info({ requestId, orderRef, receivedKobo }, "Splits would execute here (Phase 4)");
       }
     }
 
     // ── 8. Always respond 200 ─────────────────────────────────────────────────
-    // Responding 200 even on business-logic issues is correct — Nomba interprets
-    // anything else as a delivery failure and will retry, which causes duplicates.
     res.status(200).json({
-      status: "received",
+      status:        "received",
       requestId,
       transactionId: txn.transactionId,
-      timestamp: new Date().toISOString(),
+      timestamp:     new Date().toISOString(),
     });
   }
 );
