@@ -1,39 +1,43 @@
+// Run with: node --env-file=.env gen-sig.mjs
 import crypto from "crypto";
 
-// Edit these values to match whatever payload you're sending in Thunder Client
-const SECRET    = "NombaHackathon2026";
-const TIMESTAMP = "2026-06-30T18:00:00Z"; // must match nomba-timestamp header exactly
+const SECRET = process.env.NOMBA_WEBHOOK_SECRET;
+if (!SECRET) {
+  console.error("NOMBA_WEBHOOK_SECRET not found — run with: node --env-file=.env gen-sig.mjs");
+  process.exit(1);
+}
 
-const fields = {
-  event_type:    "payment_success",
-  requestId:     "test-req-001",
-  userId:        "user_001",
-  walletId:      "wallet_001",
-  transactionId: "txn_001",
-  type:          "vact_transfer",
-  time:          "2026-06-30T18:00:00Z", // must match data.transaction.time in body
-  responseCode:  "00",
-  timestamp:     TIMESTAMP,
-};
+// ── Edit these to match the Thunder Client payload you're sending ────────────
+const TIMESTAMP     = "2026-06-30T18:00:00Z";
+const EVENT_TYPE    = "payment_success";
+const REQUEST_ID    = "test-req-001";
+const USER_ID       = "user_001";
+const WALLET_ID     = "wallet_001";
+const TXN_ID        = "txn_001";
+const TXN_TYPE      = "vact_transfer";
+const TXN_TIME      = "2026-06-30T18:00:00Z";
+const RESPONSE_CODE = "00";
+// ─────────────────────────────────────────────────────────────────────────────
 
-const payload = [
-  fields.event_type,
-  fields.requestId,
-  fields.userId,
-  fields.walletId,
-  fields.transactionId,
-  fields.type,
-  fields.time,
-  fields.responseCode,
-  fields.timestamp,
+const hashPayload = [
+  EVENT_TYPE,
+  REQUEST_ID,
+  USER_ID,
+  WALLET_ID,
+  TXN_ID,
+  TXN_TYPE,
+  TXN_TIME,
+  RESPONSE_CODE,
+  TIMESTAMP,
 ].join(":");
 
 const signature = crypto
   .createHmac("sha256", SECRET)
-  .update(payload)
+  .update(hashPayload)
   .digest("base64");
 
-console.log("\nnomba-signature header value:");
-console.log(signature);
-console.log("\nnomba-timestamp header value:");
-console.log(TIMESTAMP);
+console.log("\n── Thunder Client headers ──────────────────────────");
+console.log("nomba-signature :", signature);
+console.log("nomba-timestamp :", TIMESTAMP);
+console.log("────────────────────────────────────────────────────");
+console.log("Secret used     :", SECRET.slice(0, 6) + "...");

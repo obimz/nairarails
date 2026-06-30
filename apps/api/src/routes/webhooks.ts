@@ -49,8 +49,8 @@ router.post(
     const { transaction: txn, merchant, customer } = data;
 
     // ── 2. Signature verification — always enforced, no bypass ───────────────
-    const secret = process.env["NOMBA_WEBHOOK_SECRET"];
-
+    const secret = process.env.NOMBA_WEBHOOK_SECRET;
+    console.log(secret)
     if (!secret) {
       // Server misconfiguration — refuse all requests rather than silently accepting
       // unsigned webhooks. Fix: add NOMBA_WEBHOOK_SECRET to your environment.
