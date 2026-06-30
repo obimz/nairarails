@@ -1,7 +1,7 @@
-import { Router } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 import { logger } from "../lib/logger.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // ─── GET /api/v1/dashboard/overview ──────────────────────────────────────────
 router.get("/dashboard/overview", async (_req, res, next) => {

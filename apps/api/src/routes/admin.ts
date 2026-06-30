@@ -1,10 +1,10 @@
 // apps/api/src/routes/admin.ts
 // Phase 6 admin/reconciliation routes.
 
-import { Router } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 import { logger } from "../lib/logger.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // ─── GET /api/v1/health ───────────────────────────────────────────────────────
 // Named explicitly in the Nomba checklist — judges may hit this directly.

@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Express } from "express";
 import helmet from "helmet";
 import cors from "cors";
 
@@ -12,7 +12,7 @@ import { adminRouter }     from "./routes/admin.js";
 import { errorHandler }    from "./middleware/errorHandler.js";
 import { logger }          from "./lib/logger.js";
 
-const app = express();
+const app: Express = express();
 
 // ─── Security ─────────────────────────────────────────────────────────────────
 app.use(helmet());
