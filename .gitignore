@@ -1,5 +1,43 @@
+# Dependencies
 node_modules/
-.env
+.pnp
+.pnp.js
+
+# Build outputs
 dist/
-.DS_Store
+build/
+out/
+.next/
+.cache/
+
+# Environment — match .env files at any depth in the monorepo
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Turbo
+.turbo/
+
+# Logs
 *.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
+coverage/

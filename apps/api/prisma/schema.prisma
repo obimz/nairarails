@@ -1,0 +1,136 @@
+// Prisma schema for NairaRails
+// Run `pnpm --filter @nairarails/api db:push` to apply to Supabase (dev)
+// Run `pnpm --filter @nairarails/api db:migrate` to apply migrations (prod)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Orders ───────────────────────────────────────────────────────────────────
+// One row per payment order. The virtual account NUBAN is stored here once
+// Nomba returns it from POST /accounts/virtual.
+model Order {
+  id                    Int      @id @default(autoincrement())
+  orderRef              String   @unique @map("order_ref")
+  customerName          String   @map("customer_name")
+  customerEmail         String?  @map("customer_email")
+
+  /// Amount the order was created with — stored in kobo (never naira floats)
+  expectedAmountKobo    BigInt   @map("expected_amount_kobo")
+
+  /// Amount actually received via the virtual account — null until funded
+  receivedAmountKobo    BigInt?  @map("received_amount_kobo")
+
+  currency              String   @default("NGN")
+  status                OrderStatus @default(pending)
+
+  virtualAccountNumber  String?  @map("virtual_account_number")
+  bankName              String?  @map("bank_name")
+  bankCode              String?  @map("bank_code")
+
+  /// Sender details captured from the webhook — needed for refunds
+  senderAccountNumber   String?  @map("sender_account_number")
+  senderBankCode        String?  @map("sender_bank_code")
+  senderName            String?  @map("sender_name")
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  splits                Split[]
+  ledgerEntries         LedgerEntry[]
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  pending
+  paid
+  underpayment
+  overpayment
+  unmatched
+
+  @@map("order_status")
+}
+
+// ─── Splits ───────────────────────────────────────────────────────────────────
+// One row per party per order. Percentage and calculated kobo amount are both
+// stored so we have an audit trail of what was intended vs what was sent.
+model Split {
+  id                  Int         @id @default(autoincrement())
+  orderRef            String      @map("order_ref")
+  party               String
+  accountNumber       String      @map("account_number")
+  bankCode            String      @map("bank_code")
+  percentage          Int         // 1–100, all splits for an order sum to 100
+  /// Calculated kobo amount — null until splits are executed
+  amountKobo          BigInt?     @map("amount_kobo")
+  status              SplitStatus @default(pending)
+  /// Nomba transfer reference, set once the payout is initiated
+  nombaTransferRef    String?     @map("nomba_transfer_ref")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+
+  order               Order       @relation(fields: [orderRef], references: [orderRef], onDelete: Cascade)
+
+  @@map("splits")
+}
+
+enum SplitStatus {
+  pending
+  executed
+  blocked
+  failed
+
+  @@map("split_status")
+}
+
+// ─── Ledger Entries ───────────────────────────────────────────────────────────
+// Append-only log of every money movement tied to an order.
+// Never update or delete rows here — only insert.
+model LedgerEntry {
+  id           Int              @id @default(autoincrement())
+  orderRef     String           @map("order_ref")
+  entryType    LedgerEntryType  @map("entry_type")
+  /// Amount in kobo — positive for credits, negative for debits
+  amountKobo   BigInt           @map("amount_kobo")
+  currency     String           @default("NGN")
+  reference    String?          // Nomba transaction reference
+  narration    String?
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  order        Order            @relation(fields: [orderRef], references: [orderRef], onDelete: Restrict)
+
+  @@map("ledger_entries")
+}
+
+enum LedgerEntryType {
+  payment_received
+  split_payout
+  refund_issued
+  adjustment
+
+  @@map("ledger_entry_type")
+}
+
+// ─── Webhook Events ───────────────────────────────────────────────────────────
+// Every inbound Nomba webhook is persisted here before any business logic runs.
+// The unique constraint on requestId is the DB-level idempotency guarantee —
+// a duplicate delivery will fail the INSERT and be caught before any side effects.
+model WebhookEvent {
+  id          Int      @id @default(autoincrement())
+  /// Nomba's stable per-event ID — unique constraint enforces idempotency
+  requestId   String   @unique @map("request_id")
+  eventType   String   @map("event_type")
+  /// Raw JSON payload stored as a string for auditability
+  rawPayload  String   @map("raw_payload") @db.Text
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("webhook_events")
+}

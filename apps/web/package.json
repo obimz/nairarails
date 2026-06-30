@@ -1,0 +1,33 @@
+{
+  "name": "@nairarails/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "NairaRails dashboard — React + Vite + TanStack Query + Tailwind",
+  "type": "module",
+  "scripts": {
+    "dev":        "vite",
+    "build":      "tsc && vite build",
+    "preview":    "vite preview",
+    "type-check": "tsc --noEmit",
+    "lint":       "eslint src",
+    "clean":      "rm -rf dist"
+  },
+  "dependencies": {
+    "@nairarails/shared-types": "workspace:*",
+    "@tanstack/react-query": "^5.80.7",
+    "react":     "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts":  "^2.15.3"
+  },
+  "devDependencies": {
+    "@nairarails/tsconfig": "workspace:*",
+    "@types/react":            "^19.1.8",
+    "@types/react-dom":        "^19.1.5",
+    "@vitejs/plugin-react":    "^4.5.2",
+    "autoprefixer":            "^10.4.21",
+    "postcss":                 "^8.5.6",
+    "tailwindcss":             "^3.4.17",
+    "typescript":              "^5.7.3",
+    "vite":                    "^6.3.5"
+  }
+}
