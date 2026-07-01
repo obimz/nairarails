@@ -1,41 +1,50 @@
+/**
+ * Reconciliation schemas — API contract §2.3, §2.4, §2.5
+ * Covers order classification, per-party split outcomes, exceptions, and refund responses.
+ */
 import { z } from "zod";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
+
+/** Lifecycle state of an order, set by the webhook reconciliation handler. */
 export const OrderStatusEnum = z.enum([
-  "pending",
-  "paid",
-  "underpayment",
-  "overpayment",
-  "unmatched",
+  "pending",      // No payment received yet.
+  "paid",         // Exact payment received; splits executed.
+  "underpayment", // Received less than expected; splits blocked.
+  "overpayment",  // Received more than expected; excess queued for refund.
+  "unmatched",    // Payment arrived but no matching order_ref was found.
 ]);
 
 export type OrderStatus = z.infer<typeof OrderStatusEnum>;
 
+/** Execution state of a single payout to one split party. */
 export const SplitStatusEnum = z.enum([
-  "pending",
-  "executed",
-  "blocked",
-  "failed",
+  "pending",  // Awaiting payment classification.
+  "executed", // Nomba transfer completed successfully.
+  "blocked",  // Withheld due to underpayment.
+  "failed",   // Nomba transfer was rejected.
 ]);
 
 export type SplitStatus = z.infer<typeof SplitStatusEnum>;
 
 // ─── Split Result ─────────────────────────────────────────────────────────────
+
 export const SplitResultSchema = z.object({
   party: z.string(),
   account_number: z.string(),
   bank_code: z.string(),
   percentage: z.number().int().min(1).max(100),
-  /** Calculated payout in kobo — null until the split is executed */
+  /** Kobo payout amount — null until the split is executed. */
   amount_paid_kobo: z.number().int().nonnegative().nullable(),
   status: SplitStatusEnum,
-  /** Nomba transfer reference, set once the payout is initiated */
+  /** Nomba `merchantTxRef` for this transfer — null until the payout is initiated. */
   nomba_transfer_ref: z.string().nullable(),
 });
 
 export type SplitResult = z.infer<typeof SplitResultSchema>;
 
 // ─── Audit Trail ─────────────────────────────────────────────────────────────
+
 export const AuditTrailEventEnum = z.enum([
   "va_created",
   "payment_received",
@@ -52,7 +61,7 @@ export type AuditTrailEvent = z.infer<typeof AuditTrailEventEnum>;
 export const AuditTrailEntrySchema = z.object({
   event: AuditTrailEventEnum,
   timestamp: z.string().datetime(),
-  /** Amount in kobo, present for payment/split/refund events */
+  /** Present on payment, split, and refund events. */
   amount_kobo: z.number().int().nonnegative().optional(),
   status: z.string().optional(),
   channel: z.string().optional(),
@@ -62,17 +71,17 @@ export const AuditTrailEntrySchema = z.object({
 export type AuditTrailEntry = z.infer<typeof AuditTrailEntrySchema>;
 
 // ─── Reconciliation Detail ────────────────────────────────────────────────────
+
 export const ReconciliationDetailSchema = z.object({
   order_ref: z.string(),
   virtual_account_number: z.string(),
-  /** Amount in kobo */
   expected_amount_kobo: z.number().int().nonnegative(),
-  /** Amount in kobo — null until payment arrives */
+  /** Null until the funding webhook is processed. */
   received_amount_kobo: z.number().int().nonnegative().nullable(),
   status: OrderStatusEnum,
-  /** Positive kobo shortfall for underpayment, 0 otherwise */
+  /** max(0, expected − received). Non-zero only for underpayments. */
   shortfall_kobo: z.number().int().nonnegative(),
-  /** Positive kobo excess for overpayment, 0 otherwise */
+  /** max(0, received − expected). Non-zero only for overpayments. */
   excess_kobo: z.number().int().nonnegative(),
   splits_executed: z.boolean(),
   splits: z.array(SplitResultSchema),
@@ -82,22 +91,20 @@ export const ReconciliationDetailSchema = z.object({
 export type ReconciliationDetail = z.infer<typeof ReconciliationDetailSchema>;
 
 // ─── Exception ────────────────────────────────────────────────────────────────
+
 export const ExceptionTypeEnum = z.enum(["underpayment", "overpayment", "unmatched"]);
 export type ExceptionType = z.infer<typeof ExceptionTypeEnum>;
 
 export const ExceptionSchema = z.object({
   order_ref: z.string(),
   type: ExceptionTypeEnum,
-  /** Amount in kobo */
   expected_amount_kobo: z.number().int().nonnegative(),
-  /** Amount in kobo */
   received_amount_kobo: z.number().int().nonnegative(),
-  /** kobo shortfall, 0 for non-underpayment */
   shortfall_kobo: z.number().int().nonnegative(),
-  /** kobo excess, 0 for non-overpayment */
   excess_kobo: z.number().int().nonnegative(),
   raised_at: z.string().datetime(),
   resolved: z.boolean(),
+  /** Null until the exception is actioned. */
   resolved_at: z.string().datetime().nullable(),
 });
 
@@ -109,3 +116,20 @@ export const ExceptionListResponseSchema = z.object({
 });
 
 export type ExceptionListResponse = z.infer<typeof ExceptionListResponseSchema>;
+
+// ─── Refund Excess Response ───────────────────────────────────────────────────
+
+/**
+ * Response for POST /api/v1/exceptions/:order_ref/refund-excess (§2.5).
+ * `status` is a literal — if the refund fails the route throws an error instead.
+ */
+export const RefundExcessResponseSchema = z.object({
+  order_ref: z.string(),
+  /** Kobo amount returned to the original payer. Equals the order's excess_kobo. */
+  refunded_amount_kobo: z.number().int().positive(),
+  status: z.literal("resolved"),
+  /** Nomba `merchantTxRef` for the outbound refund transfer. */
+  nomba_transfer_ref: z.string(),
+});
+
+export type RefundExcessResponse = z.infer<typeof RefundExcessResponseSchema>;

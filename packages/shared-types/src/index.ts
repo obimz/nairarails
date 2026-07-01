@@ -1,5 +1,8 @@
-// packages/shared-types — single import point for all NairaRails contracts
-// import { CreateOrderRequestSchema } from "@nairarails/shared-types"
+/**
+ * @nairarails/shared-types — single import point for all NairaRails Zod schemas and types.
+ *
+ *   import { CreateOrderRequestSchema } from "@nairarails/shared-types"
+ */
 
 export * from "./order.js";
 export * from "./reconciliation.js";
