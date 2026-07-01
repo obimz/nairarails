@@ -1,10 +1,14 @@
+/**
+ * Order schemas — API contract §2.1 and §2.2
+ * All monetary amounts are in kobo (₦1 = 100 kobo). Floats are never accepted.
+ */
 import { z } from "zod";
 
 // ─── Split ────────────────────────────────────────────────────────────────────
-// Each split party must have a verifiable bank account. percentage is an integer
-// between 1–100. All amounts tracked in kobo (bigint-safe integers).
+
 export const SplitSchema = z.object({
   party: z.string().min(1, "party name is required"),
+  /** Standard Nigerian NUBAN — always exactly 10 digits. */
   account_number: z
     .string()
     .length(10, "Nigerian account numbers are exactly 10 digits")
@@ -19,8 +23,13 @@ export const SplitSchema = z.object({
 
 export type Split = z.infer<typeof SplitSchema>;
 
-// ─── Create Order ─────────────────────────────────────────────────────────────
-// expected_amount is in KOBO. The refine() ensures splits total exactly 100.
+// ─── Create Order Request ─────────────────────────────────────────────────────
+
+/**
+ * Validates POST /api/v1/orders.
+ * The `.refine()` enforces that all split percentages sum to exactly 100 —
+ * without this, a partial total would silently leave funds undisbursed.
+ */
 export const CreateOrderRequestSchema = z
   .object({
     order_ref: z
@@ -30,7 +39,7 @@ export const CreateOrderRequestSchema = z
       .regex(/^[a-zA-Z0-9_-]+$/, "order_ref must be alphanumeric"),
     customer_name: z.string().min(1, "customer_name is required").max(100),
     customer_email: z.string().email("invalid email address").optional(),
-    /** Amount in kobo — ₦1 = 100 kobo. Never accept floats here. */
+    /** Order value in kobo. ₦5,000 = 500000. */
     expected_amount_kobo: z
       .number()
       .int("amount must be in whole kobo, no decimals")
@@ -52,14 +61,18 @@ export const CreateOrderRequestSchema = z
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
 
 // ─── Order Response ───────────────────────────────────────────────────────────
+
+/**
+ * Response for POST /api/v1/orders (201 Created).
+ * `bank_name` reflects the actual Nomba-issuing MFB — do not hardcode "Nomba".
+ */
 export const OrderResponseSchema = z.object({
   order_ref: z.string(),
   virtual_account_number: z.string(),
   bank_name: z.string(),
-  bank_code: z.string(),
-  /** Amount in kobo */
   expected_amount_kobo: z.number().int().positive(),
   currency: z.literal("NGN"),
+  /** Always "pending" on creation; updated by the webhook handler. */
   status: z.enum(["pending", "paid", "underpayment", "overpayment", "unmatched"]),
   created_at: z.string().datetime(),
 });
@@ -67,12 +80,12 @@ export const OrderResponseSchema = z.object({
 export type OrderResponse = z.infer<typeof OrderResponseSchema>;
 
 // ─── Order List Item ──────────────────────────────────────────────────────────
+
 export const OrderListItemSchema = z.object({
   order_ref: z.string(),
   customer_name: z.string(),
-  /** Amount in kobo */
   expected_amount_kobo: z.number().int().nonnegative(),
-  /** Amount in kobo — null until a payment arrives */
+  /** Null until a payment webhook is processed. */
   received_amount_kobo: z.number().int().nonnegative().nullable(),
   status: z.enum(["pending", "paid", "underpayment", "overpayment", "unmatched"]),
   virtual_account_number: z.string(),
@@ -82,6 +95,7 @@ export const OrderListItemSchema = z.object({
 export type OrderListItem = z.infer<typeof OrderListItemSchema>;
 
 // ─── Order List Response ──────────────────────────────────────────────────────
+
 export const OrderListResponseSchema = z.object({
   results: z.array(OrderListItemSchema),
   page: z.number().int().positive(),
