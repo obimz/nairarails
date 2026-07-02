@@ -1,0 +1,14 @@
+{
+  "extends": "@nairarails/tsconfig/base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "./dist/mock",
+    "rootDir": "./src",
+    "noEmit": true
+  },
+  "include": ["src/mock/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
