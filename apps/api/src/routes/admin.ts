@@ -161,7 +161,7 @@ router.get("/admin/reconcile-check", async (req, res, next) => {
       drift,
     });
   } catch (err) {
-    next(err);
+    return next(err);
   }
 });
 

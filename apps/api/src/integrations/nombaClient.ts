@@ -307,12 +307,12 @@ export interface ListTransactionsParams {
 }
 
 export interface NombaTransaction {
-  transactionId:  string | undefined;
-  merchantTxRef:  string | undefined;
-  amount:         number | undefined; // kobo
-  status:         string | undefined;
-  type:           string | undefined;
-  createdAt:      string | undefined;
+  transactionId:  string; // always "" when absent — mapping provides fallback
+  merchantTxRef:  string;
+  amount:         number; // kobo — always 0 when absent
+  status:         string;
+  type:           string;
+  createdAt:      string;
   narration?:     string | undefined;
 }
 
