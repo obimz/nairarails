@@ -8,6 +8,55 @@
 
 ---
 
+## ✅ Confirmed Nomba Sandbox Facts (verified against real API, 2026-07-01)
+
+These override anything in Training.md or earlier assumptions where they conflict.
+
+### Base URL
+- Sandbox: `https://sandbox.nomba.com/v1` (confirmed by hackathon admins on Slack — Training.md says `sandbox.api.nomba.com` which is wrong)
+
+### POST /accounts/virtual — real response shape
+```json
+{
+  "code": "00",
+  "description": "SUCCESS",
+  "message": "SUCCESS",
+  "status": true,
+  "data": {
+    "createdAt": "2026-07-01T03:51:24.905Z",
+    "bankAccountNumber": "7480738575",
+    "bankAccountName": "Nomba/ChisomTraders",
+    "bankName": "Nombank MFB",
+    "accountRef": "ord-005",
+    "accountHolderId": "f666ef9b-888e-4799-85ce-acb505b28023",
+    "accountName": "Nomba Hackathon 2026",
+    "currency": "NGN",
+    "bvn": "1234567890",
+    "expired": false
+  }
+}
+```
+- NUBAN field: `data.bankAccountNumber` (not `accountNumber`, not `nuban`)
+- Bank name field: `data.bankName` → `"Nombank MFB"`
+- Success indicator: `code === "00"` and `status === true`
+- `accountName` in the response is the merchant account name, not the customer name — ignore it
+- `accountName` in the **request** must contain no special characters (em dashes, etc.) — use plain customer name only
+
+### Authentication
+- Endpoint: `POST /auth/token/issue`
+- Body: `{ grant_type, client_id, client_secret }` in JSON body
+- Header: `accountId` (not in body)
+- Response wraps token in `data.access_token`
+- Token valid 60 min — cache at module scope, refresh at 55-min mark
+
+### Database (Supabase)
+- `DATABASE_URL`: transaction pooler port `6543` with `?pgbouncer=true` — this is what works
+- `DIRECT_URL`: session pooler port `5432` — for migrations only, not used by the running server
+- Port `5432` may be blocked on some networks — `db push` may require a different network
+
+---
+
+
 ## Phase 0 — Monorepo Scaffold & Environment
 
 **Stack:** pnpm, Turborepo, TypeScript
@@ -114,7 +163,7 @@ Nomba needs your webhook URL registered before it can send anything there, and t
 
 ---
 
-## Phase 5 — Backend Routes: Orders & Webhooks
+## Phase 5 — Backend Routes: Orders & Webhooksalright now pl
 
 **Stack:** Express, Zod middleware, the packages from Phases 1–4
 

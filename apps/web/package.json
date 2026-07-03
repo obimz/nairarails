@@ -8,6 +8,7 @@
     "dev":        "vite",
     "build":      "tsc && vite build",
     "preview":    "vite preview",
+    "mock":       "tsx src/mock/server.ts",
     "type-check": "tsc --noEmit",
     "lint":       "eslint src",
     "clean":      "rm -rf dist"
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@nairarails/tsconfig": "workspace:*",
+    "@types/node":             "^22.20.0",
     "@types/react":            "^19.1.8",
     "@types/react-dom":        "^19.1.5",
     "@vitejs/plugin-react":    "^4.5.2",

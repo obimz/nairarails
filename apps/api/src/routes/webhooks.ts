@@ -4,12 +4,15 @@ import {
   classify,
   shortfallKobo,
   excessKobo,
+  calculateSplits,
 } from "@nairarails/webhook-core";
 import {
   NombaWebhookEnvelopeSchema,
   NOMBA_SIGNATURE_HEADER,
   NOMBA_TIMESTAMP_HEADER,
 } from "@nairarails/shared-types";
+import { prisma } from "../db/client.js";
+import { lookupBankAccount, transferToBank } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
 
 const router: ExpressRouter = Router();
@@ -18,7 +21,7 @@ const router: ExpressRouter = Router();
  * POST /api/v1/webhooks/nomba
  *
  * ⚠️  Mounted with express.raw({ type: "*\/*" }) in server.ts so req.body is a
- *     raw Buffer. We parse JSON manually AFTER signature verification.
+ *     raw Buffer. We parse JSON manually after extracting the signature inputs.
  *
  * Confirmed real Nomba signature algorithm:
  *   HMAC-SHA256( colon-joined fields, secret ) → base64
@@ -33,7 +36,7 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     const rawBody = req.body as Buffer;
 
-    // ── 1. Parse body first (needed to extract fields for signature check) ────
+    // ── 1. Parse body ─────────────────────────────────────────────────────────
     let envelope: ReturnType<typeof NombaWebhookEnvelopeSchema.parse>;
     try {
       const parsed = JSON.parse(rawBody.toString("utf8")) as unknown;
@@ -48,12 +51,9 @@ router.post(
     const { requestId, event_type, data } = envelope;
     const { transaction: txn, merchant, customer } = data;
 
-    // ── 2. Signature verification — always enforced, no bypass ───────────────
-    const secret = process.env.NOMBA_WEBHOOK_SECRET;
-    console.log(secret)
+    // ── 2. Signature verification ─────────────────────────────────────────────
+    const secret = process.env["NOMBA_WEBHOOK_SECRET"];
     if (!secret) {
-      // Server misconfiguration — refuse all requests rather than silently accepting
-      // unsigned webhooks. Fix: add NOMBA_WEBHOOK_SECRET to your environment.
       logger.error("NOMBA_WEBHOOK_SECRET is not set — refusing webhook request");
       res.status(500).json({
         error: { code: "INTERNAL_ERROR", message: "Webhook secret not configured" },
@@ -108,95 +108,195 @@ router.post(
       "Nomba webhook received"
     );
 
-    // ── 3. Idempotency ────────────────────────────────────────────────────────
-    // TODO (Phase 3): check webhook_events WHERE request_id = requestId.
-    // If a row exists → already handled, return 200 immediately.
-    // const existing = await prisma.webhookEvent.findUnique({ where: { requestId } });
-    // if (existing) {
-    //   logger.info({ requestId }, "Duplicate webhook ignored");
-    //   res.status(200).json({ status: "duplicate", requestId });
-    //   return;
-    // }
+    // ── 3. Idempotency check ──────────────────────────────────────────────────
+    // Check BEFORE persisting. If the row already exists, this event was already
+    // handled — return 200 immediately so Nomba stops retrying.
+    const existingEvent = await prisma.webhookEvent.findUnique({
+      where: { requestId },
+    });
+    if (existingEvent) {
+      logger.info({ requestId }, "Duplicate webhook ignored");
+      res.status(200).json({ status: "duplicate_ignored", requestId });
+      return;
+    }
 
     // ── 4. Persist raw event ──────────────────────────────────────────────────
-    // TODO (Phase 3): INSERT webhook_events (request_id, event_type, raw_payload)
-    // The unique DB constraint on request_id is the hard idempotency guarantee.
+    // Write the raw payload BEFORE any business logic so if anything downstream
+    // throws, we still have a record that this event arrived.
+    // The unique constraint on request_id is the DB-level idempotency guarantee —
+    // if two requests race here, the second INSERT will fail and we'll return 200.
+    try {
+      await prisma.webhookEvent.create({
+        data: {
+          requestId,
+          eventType:  event_type,
+          rawPayload: rawBody.toString("utf8"),
+        },
+      });
+    } catch (err: unknown) {
+      // Unique constraint violation — another concurrent request already persisted it.
+      if (
+        err instanceof Error &&
+        "code" in err &&
+        (err as { code: string }).code === "P2002"
+      ) {
+        logger.info({ requestId }, "Race-condition duplicate webhook — ignored");
+        res.status(200).json({ status: "duplicate_ignored", requestId });
+        return;
+      }
+      throw err;
+    }
 
     // ── 5 & 6. Classify and update order ─────────────────────────────────────
-    // Act only on virtual account funding events.
-    // Real Nomba event: event_type === "payment_success" + type === "vact_transfer"
+    // Only act on virtual account funding events.
     if (event_type === "payment_success" && txn.type === "vact_transfer") {
-      // Order reference is aliasAccountReference — set as accountRef on VA creation.
       const orderRef = txn.aliasAccountReference;
 
       if (!orderRef) {
         logger.warn({ requestId }, "payment_success has no aliasAccountReference — quarantining");
-        // TODO (Phase 3): insert into an unmatched/quarantine log
+        // Event is already persisted above — quarantine is implicit (no order linked).
         res.status(200).json({ status: "unmatched_quarantined", requestId });
         return;
       }
 
-      // TODO (Phase 3): fetch order by orderRef
-      // const order = await prisma.order.findUnique({ where: { orderRef } });
-      // if (!order) {
-      //   logger.warn({ requestId, orderRef }, "No order found — quarantining");
-      //   res.status(200).json({ status: "unmatched_quarantined", requestId });
-      //   return;
-      // }
+      const order = await prisma.order.findUnique({ where: { orderRef } });
+      if (!order) {
+        logger.warn({ requestId, orderRef }, "No order found for aliasAccountReference — quarantining");
+        res.status(200).json({ status: "unmatched_quarantined", requestId });
+        return;
+      }
 
-      const expectedKobo = 0; // TODO (Phase 3): order.expectedAmountKobo
+      const expectedKobo = Number(order.expectedAmountKobo);
       const receivedKobo = txn.transactionAmount;
 
       const classification = classify(expectedKobo, receivedKobo);
       const shortfall      = shortfallKobo(expectedKobo, receivedKobo);
       const excess         = excessKobo(expectedKobo, receivedKobo);
 
-      // Sender details for potential refund — from data.customer (not transaction)
       const senderName    = customer?.senderName    ?? null;
       const senderAccount = customer?.accountNumber ?? null;
       const senderBank    = customer?.bankCode      ?? null;
 
       logger.info(
-        {
-          requestId,
-          orderRef,
-          classification,
-          expectedKobo,
-          receivedKobo,
-          shortfall,
-          excess,
-          senderName,
-          senderAccount,
-          senderBank,
-        },
+        { requestId, orderRef, classification, expectedKobo, receivedKobo, shortfall, excess },
         "Payment classified"
       );
 
-      // TODO (Phase 3): UPDATE orders SET status = classification,
-      //   received_amount_kobo = receivedKobo,
-      //   sender_account_number = senderAccount,
-      //   sender_bank_code = senderBank,
-      //   sender_name = senderName
-      //   WHERE order_ref = orderRef
+      // Update order status + sender details + received amount, and append a
+      // ledger entry — all in a single transaction so they're always consistent.
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { orderRef },
+          data: {
+            status:               classification,
+            receivedAmountKobo:   BigInt(receivedKobo),
+            senderName:           senderName,
+            senderAccountNumber:  senderAccount,
+            senderBankCode:       senderBank,
+          },
+        });
 
-      // TODO (Phase 3): INSERT ledger_entry
+        await tx.ledgerEntry.create({
+          data: {
+            orderRef,
+            entryType:   "payment_received",
+            amountKobo:  BigInt(receivedKobo),
+            reference:   txn.transactionId,
+            narration:   `Payment ${classification}: received ${receivedKobo} kobo, expected ${expectedKobo} kobo`,
+          },
+        });
 
-      // ── 7. Execute splits on full payment ───────────────────────────────────
-      if (classification === "paid") {
-        // TODO (Phase 4):
-        // const splits = await prisma.split.findMany({ where: { orderRef } });
-        // const allocations = calculateSplits(receivedKobo, splits);
-        // for (const allocation of allocations) {
-        //   const { accountName } = await nombaClient.lookupBankAccount(allocation.bank_code, allocation.account_number);
-        //   await nombaClient.transferToBank({ ...allocation, accountName, merchantTxRef: `split_${orderRef}_${allocation.party}_${requestId}` });
-        // }
-        logger.info({ requestId, orderRef, receivedKobo }, "Splits would execute here (Phase 4)");
+        // Mark the webhook event as processed.
+        await tx.webhookEvent.update({
+          where: { requestId },
+          data:  { processedAt: new Date() },
+        });
+      });
+
+      // ── 7. Execute splits ─────────────────────────────────────────────────────
+      // Splits run on exact payment AND overpayment — split the expected amount only,
+      // the excess is quarantined and refundable via POST /exceptions/:ref/refund-excess.
+      if (classification === "paid" || classification === "overpayment") {
+        const splitRows = await prisma.split.findMany({ where: { orderRef } });
+
+        // calculateSplits always sums back to expectedKobo exactly (rounding-safe).
+        const allocations = calculateSplits(expectedKobo, splitRows.map((s) => ({
+          party:          s.party,
+          account_number: s.accountNumber,
+          bank_code:      s.bankCode,
+          percentage:     s.percentage,
+        })));
+
+        for (const allocation of allocations) {
+          const splitRow = splitRows.find((s) => s.party === allocation.party);
+          if (!splitRow) continue;
+
+          try {
+            // Always lookup before transfer — sending to a wrong NUBAN can be irreversible.
+            const { accountName } = await lookupBankAccount({
+              bankCode:      allocation.bank_code,
+              accountNumber: allocation.account_number,
+            });
+
+            // merchantTxRef is compound so it's unique per split per event.
+            const merchantTxRef = `split_${orderRef}_${allocation.party}_${requestId}`;
+
+            const { transferRef, status: txStatus } = await transferToBank({
+              amountKobo:    allocation.amount_kobo,
+              bankCode:      allocation.bank_code,
+              accountNumber: allocation.account_number,
+              accountName,
+              narration:     `NairaRails split — ${allocation.party} (${allocation.percentage}%)`,
+              merchantTxRef,
+            });
+
+            // Update split row and append ledger entry in one transaction.
+            await prisma.$transaction([
+              prisma.split.update({
+                where: { id: splitRow.id },
+                data: {
+                  status:          "executed",
+                  amountKobo:      BigInt(allocation.amount_kobo),
+                  nombaTransferRef: transferRef,
+                },
+              }),
+              prisma.ledgerEntry.create({
+                data: {
+                  orderRef,
+                  entryType:   "split_payout",
+                  amountKobo:  BigInt(-allocation.amount_kobo), // debit — money leaving
+                  reference:   transferRef,
+                  narration:   `Split to ${allocation.party}: ${allocation.amount_kobo} kobo (${allocation.percentage}%)`,
+                },
+              }),
+            ]);
+
+            logger.info(
+              { orderRef, party: allocation.party, amountKobo: allocation.amount_kobo, transferRef, txStatus },
+              "Split executed"
+            );
+          } catch (splitErr) {
+            // Mark the individual split as failed — don't abort the whole webhook.
+            // A failed split is observable in the DB and retriable; crashing the
+            // webhook handler would cause Nomba to re-deliver and re-classify.
+            await prisma.split.update({
+              where: { id: splitRow.id },
+              data:  { status: "failed" },
+            }).catch(() => {/* best-effort — don't mask original error in logs */});
+
+            logger.error(
+              { orderRef, party: allocation.party, err: splitErr },
+              "Split execution failed — marked as failed, manual retry required"
+            );
+          }
+        }
       }
     }
 
     // ── 8. Always respond 200 ─────────────────────────────────────────────────
+    // Respond 200 once the event is safely recorded — Nomba will not retry.
     res.status(200).json({
-      status:        "received",
+      status:        "ok",
       requestId,
       transactionId: txn.transactionId,
       timestamp:     new Date().toISOString(),

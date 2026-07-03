@@ -10,6 +10,8 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+  // Both point to the same PgBouncer pooler (port 6543) — port 5432 is blocked
+  // on the current network. pgbouncer=true on the URL disables prepared statements.
 }
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
