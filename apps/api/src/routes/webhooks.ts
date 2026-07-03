@@ -38,7 +38,19 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     const rawBody = req.body as Buffer;
 
-    // ── 1. Parse body ─────────────────────────────────────────────────────────
+    // ── 0. Log every inbound hit immediately — before any verification ────────
+    logger.info(
+      {
+        method:        req.method,
+        path:          req.path,
+        ip:            req.ip,
+        contentLength: req.headers["content-length"],
+        hasSignature:  !!(req.headers["nomba-signature"] ?? req.headers["x-nomba-signature"] ?? req.headers["x-sig-value"]),
+        hasTimestamp:  !!(req.headers["nomba-timestamp"] ?? req.headers["x-nomba-timestamp"]),
+        bodyBytes:     Buffer.isBuffer(rawBody) ? rawBody.length : "not-a-buffer",
+      },
+      "Nomba webhook hit received"
+    );
     let envelope: ReturnType<typeof NombaWebhookEnvelopeSchema.parse>;
     try {
       const parsed = JSON.parse(rawBody.toString("utf8")) as unknown;

@@ -13,10 +13,11 @@
 import { logger } from "../lib/logger.js";
 
 // Confirmed real sandbox base URL (not sandbox.api.nomba.com — that's wrong per verified Nomba docs)
-const BASE_URL    = process.env["NOMBA_BASE_URL"]    ?? "https://sandbox.nomba.com/v1";
-const ACCOUNT_ID  = process.env["NOMBA_ACCOUNT_ID"]  ?? "";
-const CLIENT_ID   = process.env["NOMBA_CLIENT_ID"]   ?? "";
-const CLIENT_SECRET = process.env["NOMBA_CLIENT_SECRET"] ?? "";
+const BASE_URL         = process.env["NOMBA_BASE_URL"]         ?? "https://sandbox.nomba.com/v1";
+const ACCOUNT_ID       = process.env["NOMBA_ACCOUNT_ID"]       ?? "";
+const SUB_ACCOUNT_ID   = process.env["NOMBA_SUB_ACCOUNT_ID"]   ?? "";
+const CLIENT_ID        = process.env["NOMBA_CLIENT_ID"]        ?? "";
+const CLIENT_SECRET    = process.env["NOMBA_CLIENT_SECRET"]    ?? "";
 
 // ─── Typed error ──────────────────────────────────────────────────────────────
 export class NombaApiError extends Error {
@@ -155,11 +156,12 @@ function extractVAFields(response: Record<string, unknown>): CreateVirtualAccoun
 
 /**
  * Create a virtual account (NUBAN) for a single order.
- * POST /accounts/virtual
+ * POST /accounts/virtual/{subAccountId}
  *
-/**
- * Create a virtual account (NUBAN) for a single order.
- * POST /accounts/virtual
+ * The subAccountId path param is REQUIRED for Nomba webhooks to fire.
+ * Using POST /accounts/virtual (without the subAccountId) provisions the
+ * account but webhooks are never delivered — confirmed by Nomba hackathon
+ * support on 2026-07-03.
  *
  * accountRef = order_ref so aliasAccountReference in the webhook maps back
  * to the order with no secondary lookup.
@@ -174,16 +176,29 @@ export async function createVirtualAccount(
 ): Promise<CreateVirtualAccountResult> {
   const { accountRef, accountName, expectedAmountKobo, expiryDate } = params;
 
+  if (!SUB_ACCOUNT_ID) {
+    throw new Error(
+      "createVirtualAccount: NOMBA_SUB_ACCOUNT_ID is not set. " +
+      "Virtual account webhooks will not fire without it. " +
+      "Add NOMBA_SUB_ACCOUNT_ID to your .env file."
+    );
+  }
+
   logger.info({ accountRef, accountName, expectedAmountKobo }, "Creating Nomba virtual account");
 
   type VAResponse = { data: Record<string, unknown> };
 
-  const response = await nombaRequest<VAResponse>("POST", "/accounts/virtual", {
-    accountRef,
-    accountName,
-    amount: expectedAmountKobo,
-    ...(expiryDate ? { expiryDate } : {}),
-  });
+  // Path includes the subAccountId — this is what makes Nomba fire webhooks.
+  const response = await nombaRequest<VAResponse>(
+    "POST",
+    `/accounts/virtual/${SUB_ACCOUNT_ID}`,
+    {
+      accountRef,
+      accountName,
+      amount: expectedAmountKobo,
+      ...(expiryDate ? { expiryDate } : {}),
+    }
+  );
 
   const result = extractVAFields(response as Record<string, unknown>);
 
@@ -208,7 +223,10 @@ export interface LookupBankAccountResult {
 
 /**
  * Resolve a bank account number to the registered account name.
- * POST /transfers/bank/lookup
+ * POST /accounts/{subAccountId}/transfers/bank/lookup
+ *
+ * Scoped to the sub-account so the lookup is authorised against the right
+ * account context. Authorization header still carries the parent accountId.
  *
  * ALWAYS call this before transferToBank — sending to a wrong NUBAN can be
  * irreversible, and the resolved name is a required field on the transfer.
@@ -222,7 +240,7 @@ export async function lookupBankAccount(
 
   const response = await nombaRequest<{ data: { accountName: string } }>(
     "POST",
-    "/transfers/bank/lookup",
+    `/accounts/${SUB_ACCOUNT_ID}/transfers/bank/lookup`,
     { bankCode, accountNumber }
   );
 
@@ -249,7 +267,10 @@ export interface TransferToBankResult {
 
 /**
  * Initiate a bank transfer to a verified recipient.
- * POST /transfers/bank
+ * POST /accounts/{subAccountId}/transfers/bank
+ *
+ * Scoped to the sub-account so funds are debited from the right account.
+ * Authorization header still carries the parent accountId.
  *
  * merchantTxRef must be unique per transfer — collisions will cause Nomba to
  * return the original transfer result rather than initiating a new one, which
@@ -275,15 +296,19 @@ export async function transferToBank(
     };
   };
 
-  const response = await nombaRequest<TransferResponse>("POST", "/transfers/bank", {
-    amount:        amountKobo,  // kobo
-    bankCode,
-    accountNumber,
-    accountName,
-    senderName:    "NairaRails",
-    narration,
-    merchantTxRef,
-  });
+  const response = await nombaRequest<TransferResponse>(
+    "POST",
+    `/accounts/${SUB_ACCOUNT_ID}/transfers/bank`,
+    {
+      amount:        amountKobo,  // kobo
+      bankCode,
+      accountNumber,
+      accountName,
+      senderName:    "NairaRails",
+      narration,
+      merchantTxRef,
+    }
+  );
 
   const d = response.data;
   const transferRef = d.merchantTxRef ?? d.transferId ?? d.reference ?? merchantTxRef;
@@ -324,7 +349,10 @@ export interface ListTransactionsResult {
 
 /**
  * List transactions from Nomba for a date range.
- * GET /transactions?dateFrom=&dateTo=&status=success
+ * GET /accounts/{subAccountId}/transactions?dateFrom=&dateTo=&status=success
+ *
+ * Scoped to the sub-account so we only see transactions belonging to the
+ * virtual accounts created under it. Authorization header carries parent accountId.
  *
  * Used by the reconciliation backstop to diff Nomba's view against
  * the local ledger_entries table. Reconcile by merchantTxRef — that's
@@ -354,7 +382,10 @@ export async function listTransactions(
     };
   };
 
-  const response = await nombaRequest<TxResponse>("GET", `/transactions?${qs.toString()}`);
+  const response = await nombaRequest<TxResponse>(
+    "GET",
+    `/accounts/${SUB_ACCOUNT_ID}/transactions?${qs.toString()}`
+  );
   const d = response.data;
 
   // Nomba may return the list under `transactions` or `records`.

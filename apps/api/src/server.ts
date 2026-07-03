@@ -35,6 +35,14 @@ app.use(
 // All other routes get the normal JSON parser.
 app.use(express.json());
 
+// ─── Incoming request logger ─────────────────────────────────────────────────
+// Logs every request that reaches the server — useful to confirm external
+// callers (e.g. Nomba sandbox) are actually hitting the process.
+app.use((req, _res, next) => {
+  logger.info({ method: req.method, url: req.url, ip: req.ip }, "→ incoming request");
+  next();
+});
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/", healthRouter);
 app.use("/api/v1", webhookRouter);
