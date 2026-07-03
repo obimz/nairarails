@@ -28,7 +28,8 @@ export const NombaWebhookTransactionSchema = z.object({
   transactionId: z.string(),
   /** "vact_transfer" for virtual account funding events. */
   type: z.string(),
-  /** Amount received in kobo — use this for reconciliation. */
+  /** Amount received in NAIRA (not kobo) — Nomba always sends naira here.
+   *  Multiply by 100 immediately after parsing to get kobo before reconciliation. */
   transactionAmount: z.number().nonnegative(),
   fee: z.number().nonnegative().optional(),
   /** Required input to the signature hash — do not discard. */
