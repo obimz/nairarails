@@ -8,6 +8,7 @@ import { orderRouter }     from "./routes/orders.js";
 import { exceptionRouter } from "./routes/exceptions.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { adminRouter }     from "./routes/admin.js";
+import { merchantRouter }  from "./routes/merchants.js";
 import { errorHandler }    from "./middleware/errorHandler.js";
 import { logger }          from "./lib/logger.js";
 
@@ -41,6 +42,7 @@ app.use("/api/v1", orderRouter);
 app.use("/api/v1", exceptionRouter);
 app.use("/api/v1", dashboardRouter);
 app.use("/api/v1", adminRouter);
+app.use("/api/v1/merchants", merchantRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
