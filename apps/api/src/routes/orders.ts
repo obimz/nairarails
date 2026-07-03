@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { CreateOrderRequestSchema } from "@nairarails/shared-types";
 import { calculateSplits, shortfallKobo, excessKobo } from "@nairarails/webhook-core";
 import { validate } from "../middleware/validate.js";
+import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { prisma } from "../db/client.js";
 import { createVirtualAccount } from "../integrations/nombaClient.js";
@@ -19,11 +20,14 @@ const ListOrdersQuerySchema = z.object({
 });
 
 // ─── POST /api/v1/orders ──────────────────────────────────────────────────────
+// Phase 15: apiKeyAuth required — merchantId comes from res.locals.merchant.id
 router.post(
   "/orders",
+  apiKeyAuth,
   validate(CreateOrderRequestSchema),
   async (req, res, next) => {
     try {
+      const merchant = res.locals.merchant;
       const { order_ref, customer_name, customer_email, expected_amount_kobo, currency, splits } =
         req.body as import("@nairarails/shared-types").CreateOrderRequest;
 
@@ -39,6 +43,7 @@ router.post(
         await tx.order.create({
           data: {
             orderRef:           order_ref,
+            merchantId:         merchant.id,         // ← Phase 15: per-merchant FK
             customerName:       customer_name,
             customerEmail:      customer_email ?? null,
             expectedAmountKobo: BigInt(expected_amount_kobo),
@@ -62,8 +67,6 @@ router.post(
       // Step 2: Create the virtual account on Nomba.
       // accountRef = order_ref so aliasAccountReference in the webhook maps
       // back to this order with no secondary lookup.
-      // If this call fails, roll back the DB rows so the caller gets a clean
-      // error and can retry with the same order_ref — no orphaned DB rows.
       let va: Awaited<ReturnType<typeof createVirtualAccount>>;
       try {
         va = await createVirtualAccount({
@@ -93,7 +96,7 @@ router.post(
 
       const allocations = calculateSplits(expected_amount_kobo, splits);
       logger.info(
-        { order_ref, nuban: va.accountNumber, expected_amount_kobo, allocations },
+        { order_ref, merchantId: merchant.id, nuban: va.accountNumber, expected_amount_kobo, allocations },
         "Order created with virtual account"
       );
 
@@ -114,8 +117,11 @@ router.post(
 );
 
 // ─── GET /api/v1/orders ───────────────────────────────────────────────────────
-router.get("/orders", async (req, res, next) => {
+// Phase 15: filtered to the calling merchant's orders only
+router.get("/orders", apiKeyAuth, async (req, res, next) => {
   try {
+    const merchant = res.locals.merchant;
+
     const query = ListOrdersQuerySchema.safeParse(req.query);
     if (!query.success) {
       throw new AppError(422, "VALIDATION_ERROR", "Invalid query parameters");
@@ -123,10 +129,11 @@ router.get("/orders", async (req, res, next) => {
     const { page, page_size, status } = query.data;
     const skip = (page - 1) * page_size;
 
-    // Build a status filter only when one was requested.
-    const where: Prisma.OrderWhereInput = status
-      ? { status: status as Prisma.EnumOrderStatusFilter }
-      : {};
+    // Always scope to the calling merchant; optionally filter by status too.
+    const where: Prisma.OrderWhereInput = {
+      merchantId: merchant.id,
+      ...(status ? { status: status as Prisma.EnumOrderStatusFilter } : {}),
+    };
 
     const [orders, total_count] = await Promise.all([
       prisma.order.findMany({
@@ -167,20 +174,23 @@ router.get("/orders", async (req, res, next) => {
 });
 
 // ─── GET /api/v1/orders/:order_ref/reconciliation ─────────────────────────────
-router.get("/orders/:order_ref/reconciliation", async (req, res, next) => {
+// Phase 15: 404 if order doesn't belong to the calling merchant
+router.get("/orders/:order_ref/reconciliation", apiKeyAuth, async (req, res, next) => {
   try {
+    const merchant = res.locals.merchant;
     const { order_ref } = req.params as { order_ref: string };
 
     // Fetch order + splits + ledger entries in one query.
     const order = await prisma.order.findUnique({
       where: { orderRef: order_ref },
       include: {
-        splits:       { orderBy: { createdAt: "asc" } },
+        splits:        { orderBy: { createdAt: "asc" } },
         ledgerEntries: { orderBy: { createdAt: "asc" } },
       },
     });
 
-    if (!order) {
+    // Treat wrong-merchant orders as 404 — don't leak other merchants' data
+    if (!order || order.merchantId !== merchant.id) {
       throw new AppError(404, "ORDER_NOT_FOUND", `Order '${order_ref}' not found`);
     }
 
@@ -189,13 +199,12 @@ router.get("/orders/:order_ref/reconciliation", async (req, res, next) => {
     const splitsExecuted = order.splits.some((s) => s.status === "executed");
 
     // Build audit trail from ledger entries.
-    // va_created entry is synthesised from the order's createdAt timestamp.
     const auditTrail: Array<Record<string, unknown>> = [
       { event: "va_created", timestamp: order.createdAt.toISOString() },
       ...order.ledgerEntries.map((e) => ({
-        event:      e.entryType,
+        event:       e.entryType,
         amount_kobo: Number(e.amountKobo),
-        timestamp:  e.createdAt.toISOString(),
+        timestamp:   e.createdAt.toISOString(),
         ...(e.narration ? { detail: e.narration } : {}),
         ...(e.reference  ? { reference: e.reference } : {}),
       })),

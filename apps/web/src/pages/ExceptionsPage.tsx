@@ -1,12 +1,5 @@
-/**
- * ExceptionsPage — grouped exception queue.
- *
- * Shows underpayments, overpayments, and unmatched payments in separate
- * sections. The Refund Excess button on overpayments fires a real mutation
- * against POST /exceptions/:order_ref/refund-excess.
- */
-
 import React from "react";
+import { AlertTriangle, RefreshCw, CheckCircle2 } from "lucide-react";
 import { useExceptions, useRefundExcess, type Exception, type ExceptionType } from "../hooks/index.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { formatNaira } from "../lib/money.js";
@@ -17,7 +10,7 @@ const SECTIONS: { type: ExceptionType; label: string; description: string }[] = 
   {
     type:        "overpayment",
     label:       "Overpayments",
-    description: "Buyer paid more than the order amount. Splits have executed on the expected amount. Excess is quarantined pending refund.",
+    description: "Buyer paid more than the order amount. Splits ran on the expected amount. Excess is quarantined pending refund.",
   },
   {
     type:        "underpayment",
@@ -27,97 +20,65 @@ const SECTIONS: { type: ExceptionType; label: string; description: string }[] = 
   {
     type:        "unmatched",
     label:       "Unmatched Payments",
-    description: "Payment arrived with no matching order reference. Funds are quarantined — manual review required.",
+    description: "Payment arrived with no matching order reference. Funds quarantined — manual review required.",
   },
 ];
 
-// ─── Single exception row ─────────────────────────────────────────────────────
+// ─── Exception row ────────────────────────────────────────────────────────────
 
-interface ExceptionRowProps {
-  exception: Exception;
-}
-
-function ExceptionRow({ exception }: ExceptionRowProps) {
+function ExceptionRow({ exception }: { exception: Exception }) {
   const refundMutation = useRefundExcess();
-  const isRefunding    = refundMutation.isPending;
-  const isResolved     = refundMutation.isSuccess && refundMutation.variables === exception.order_ref;
-
-  const handleRefund = () => {
-    if (isRefunding) return;
-    refundMutation.mutate(exception.order_ref);
-  };
+  const isRefunding    = refundMutation.isPending && refundMutation.variables === exception.order_ref;
+  const isResolved     = refundMutation.isSuccess  && refundMutation.variables === exception.order_ref;
 
   return (
-    <tr className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
-      {/* Order ref */}
-      <td className="px-4 py-3">
-        <span className="font-mono text-sm text-gray-900">{exception.order_ref}</span>
+    <tr>
+      <td>
+        <span className="font-mono text-sm text-slate-200">{exception.order_ref}</span>
       </td>
-
-      {/* Status */}
-      <td className="px-4 py-3">
-        <StatusBadge status={exception.type} />
-      </td>
-
-      {/* Expected */}
-      <td className="px-4 py-3 text-sm text-gray-700 tabular-nums">
-        {formatNaira(exception.expected_amount_kobo)}
-      </td>
-
-      {/* Received */}
-      <td className="px-4 py-3 text-sm text-gray-700 tabular-nums">
-        {formatNaira(exception.received_amount_kobo)}
-      </td>
-
-      {/* Delta */}
-      <td className="px-4 py-3 text-sm tabular-nums">
+      <td><StatusBadge status={exception.type} /></td>
+      <td className="font-mono tabular-nums">{formatNaira(exception.expected_amount_kobo)}</td>
+      <td className="font-mono tabular-nums">{formatNaira(exception.received_amount_kobo)}</td>
+      <td className="font-mono tabular-nums">
         {exception.type === "underpayment" && (
-          <span className="text-red-600">−{formatNaira(exception.shortfall_kobo)}</span>
+          <span className="text-red-400">−{formatNaira(exception.shortfall_kobo)}</span>
         )}
         {exception.type === "overpayment" && (
-          <span className="text-purple-600">+{formatNaira(exception.excess_kobo)}</span>
+          <span className="text-purple-400">+{formatNaira(exception.excess_kobo)}</span>
         )}
         {exception.type === "unmatched" && (
-          <span className="text-gray-400">—</span>
+          <span className="text-slate-600">—</span>
         )}
       </td>
-
-      {/* Raised at */}
-      <td className="px-4 py-3 text-xs text-gray-500">
+      <td className="text-xs text-slate-500">
         {new Date(exception.raised_at).toLocaleString("en-NG", {
-          day:    "2-digit",
-          month:  "short",
-          hour:   "2-digit",
-          minute: "2-digit",
+          day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
         })}
       </td>
-
-      {/* Action */}
-      <td className="px-4 py-3">
-        {exception.type === "overpayment" && !exception.resolved && (
-          <button
-            onClick={handleRefund}
-            disabled={isRefunding || isResolved}
-            className="btn-danger text-xs px-3 py-1.5"
-          >
-            {isRefunding && refundMutation.variables === exception.order_ref
-              ? "Refunding…"
-              : isResolved
-                ? "Refunded ✓"
-                : `Refund ${formatNaira(exception.excess_kobo)}`}
-          </button>
+      <td>
+        {exception.type === "overpayment" && !exception.resolved && !isResolved && (
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={() => refundMutation.mutate(exception.order_ref)}
+              disabled={isRefunding}
+              className="btn-danger"
+            >
+              {isRefunding ? "Refunding…" : `Refund ${formatNaira(exception.excess_kobo)}`}
+            </button>
+            {refundMutation.isError && refundMutation.variables === exception.order_ref && (
+              <p className="text-xs text-red-500">{refundMutation.error.message}</p>
+            )}
+          </div>
         )}
-        {exception.resolved && (
-          <span className="text-xs text-green-600 font-medium">Resolved</span>
+        {(exception.resolved || isResolved) && (
+          <span className="flex items-center gap-1.5 text-xs text-green-400 font-medium">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Resolved
+          </span>
         )}
-        {(exception.type === "underpayment" || exception.type === "unmatched") && (
-          <span className="text-xs text-gray-400">Manual review</span>
-        )}
-        {/* Show mutation error inline */}
-        {refundMutation.isError && refundMutation.variables === exception.order_ref && (
-          <p className="text-xs text-red-500 mt-1">
-            {refundMutation.error.message}
-          </p>
+        {(exception.type === "underpayment" || exception.type === "unmatched") && !exception.resolved && (
+          <span className="text-xs text-slate-600">Manual review</span>
         )}
       </td>
     </tr>
@@ -126,29 +87,27 @@ function ExceptionRow({ exception }: ExceptionRowProps) {
 
 // ─── Exception section ────────────────────────────────────────────────────────
 
-interface ExceptionSectionProps {
-  type:        ExceptionType;
-  label:       string;
+function ExceptionSection({ type, label, description, items }: {
+  type: ExceptionType;
+  label: string;
   description: string;
-  items:       Exception[];
-}
-
-function ExceptionSection({ type, label, description, items }: ExceptionSectionProps) {
+  items: Exception[];
+}) {
   if (items.length === 0) return null;
 
   return (
     <section className="mb-8">
-      <div className="mb-3">
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="section-title">{label}</h3>
-          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-700 text-xs font-bold">
+      <div className="mb-4">
+        <div className="flex items-center gap-2.5 mb-1">
+          <h3 className="text-base font-semibold text-slate-100">{label}</h3>
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/10 text-slate-400 text-xs font-bold">
             {items.length}
           </span>
         </div>
-        <p className="text-sm text-gray-500">{description}</p>
+        <p className="text-sm text-slate-500">{description}</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="card-dark overflow-hidden">
         <table className="data-table">
           <thead>
             <tr>
@@ -179,8 +138,8 @@ export function ExceptionsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-8 flex items-center gap-2 text-gray-500 text-sm">
-        <span className="animate-spin inline-block w-4 h-4 border-2 border-gray-300 border-t-green-500 rounded-full" />
+      <div className="p-8 flex items-center gap-3 text-slate-500 text-sm">
+        <div className="w-4 h-4 border-2 border-slate-700 border-t-green-500 rounded-full animate-spin" />
         Loading exceptions…
       </div>
     );
@@ -189,57 +148,53 @@ export function ExceptionsPage() {
   if (isError) {
     return (
       <div className="p-8">
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-          <strong>Failed to load exceptions:</strong> {error.message}
-          <button onClick={() => void refetch()} className="ml-4 underline">Retry</button>
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400 flex items-center gap-3">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span><strong>Failed to load:</strong> {error.message}</span>
+          <button onClick={() => void refetch()} className="ml-auto underline">Retry</button>
         </div>
       </div>
     );
   }
 
-  const all       = data?.results ?? [];
-  const total     = data?.total_count ?? 0;
-
+  const all   = data?.results ?? [];
+  const total = data?.total_count ?? 0;
   const byType = (type: ExceptionType) => all.filter((e) => e.type === type);
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="section-title text-xl">Exception Queue</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h2 className="text-2xl font-bold text-slate-50">Exception Queue</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
             {total === 0
               ? "No open exceptions — all payments reconciled cleanly."
               : `${total} open exception${total !== 1 ? "s" : ""} requiring attention`}
           </p>
         </div>
-        <button
-          onClick={() => void refetch()}
-          className="btn-ghost text-xs"
-        >
-          ↻ Refresh
+        <button type="button" onClick={() => void refetch()} className="btn-ghost text-xs gap-2">
+          <RefreshCw className="w-3.5 h-3.5" />
+          Refresh
         </button>
       </div>
 
       {total === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
-          <div className="text-4xl mb-3">✓</div>
-          <p className="text-gray-600 font-medium">No exceptions</p>
-          <p className="text-gray-400 text-sm mt-1">All payments have been reconciled cleanly.</p>
+        <div className="card-dark p-16 text-center">
+          <CheckCircle2 className="w-10 h-10 text-green-500/40 mx-auto mb-3" />
+          <p className="text-slate-300 font-medium">No exceptions</p>
+          <p className="text-slate-600 text-sm mt-1">All payments reconciled cleanly.</p>
         </div>
       ) : (
-        <>
-          {SECTIONS.map(({ type, label, description }) => (
-            <ExceptionSection
-              key={type}
-              type={type}
-              label={label}
-              description={description}
-              items={byType(type)}
-            />
-          ))}
-        </>
+        SECTIONS.map(({ type, label, description }) => (
+          <ExceptionSection
+            key={type}
+            type={type}
+            label={label}
+            description={description}
+            items={byType(type)}
+          />
+        ))
       )}
     </div>
   );
