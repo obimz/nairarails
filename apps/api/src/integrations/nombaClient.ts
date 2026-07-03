@@ -12,8 +12,11 @@
 
 import { logger } from "../lib/logger.js";
 
-// Confirmed real sandbox base URL (not sandbox.api.nomba.com — that's wrong per verified Nomba docs)
-const BASE_URL         = process.env["NOMBA_BASE_URL"]         ?? "https://sandbox.nomba.com/v1";
+// sandbox.nomba.com does not work — the real sandbox URL is sandbox.api.nomba.com,
+// and production is api.nomba.com. Both are controlled via NOMBA_BASE_URL in .env.
+const BASE_URL         = process.env["NOMBA_BASE_URL"]         ?? "https://sandbox.api.nomba.com/v1";
+// Transfers live on /v2/ — derive from BASE_URL so a single env var controls both.
+const BASE_URL_V2      = BASE_URL.replace(/\/v1\/?$/, "/v2");
 const ACCOUNT_ID       = process.env["NOMBA_ACCOUNT_ID"]       ?? "";
 const SUB_ACCOUNT_ID   = process.env["NOMBA_SUB_ACCOUNT_ID"]   ?? "";
 const CLIENT_ID        = process.env["NOMBA_CLIENT_ID"]        ?? "";
@@ -38,11 +41,13 @@ let tokenExpiresAt: number = 0; // unix ms — refresh when within 5 min of expi
 // ─── Shared request helper ────────────────────────────────────────────────────
 // Wraps fetch with auth headers, JSON parsing, and structured error logging.
 // Throws a descriptive Error on any non-2xx response so callers can catch + surface it.
+// Pass `baseUrl` to override the default BASE_URL (e.g. BASE_URL_V2 for transfers).
 async function nombaRequest<T>(
   method: "GET" | "POST",
   path: string,
   body?: Record<string, unknown>,
-  skipAuth = false
+  skipAuth = false,
+  baseUrl = BASE_URL
 ): Promise<T> {
   const token = skipAuth ? null : await getAccessToken();
 
@@ -59,7 +64,7 @@ async function nombaRequest<T>(
     fetchInit.body = JSON.stringify(body);
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, fetchInit);
+  const res = await fetch(`${baseUrl}${path}`, fetchInit);
 
   const json = await res.json() as Record<string, unknown>;
 
@@ -223,10 +228,10 @@ export interface LookupBankAccountResult {
 
 /**
  * Resolve a bank account number to the registered account name.
- * POST /accounts/{subAccountId}/transfers/bank/lookup
+ * POST /v2/transfers/bank/{subAccountId}/lookup
  *
- * Scoped to the sub-account so the lookup is authorised against the right
- * account context. Authorization header still carries the parent accountId.
+ * Transfers (including lookup) live on v2, scoped to the sub-account.
+ * Authorization header still carries the parent accountId.
  *
  * ALWAYS call this before transferToBank — sending to a wrong NUBAN can be
  * irreversible, and the resolved name is a required field on the transfer.
@@ -240,8 +245,10 @@ export async function lookupBankAccount(
 
   const response = await nombaRequest<{ data: { accountName: string } }>(
     "POST",
-    `/accounts/${SUB_ACCOUNT_ID}/transfers/bank/lookup`,
-    { bankCode, accountNumber }
+    `/transfers/bank/${SUB_ACCOUNT_ID}/lookup`,
+    { bankCode, accountNumber },
+    false,
+    BASE_URL_V2
   );
 
   const accountName = response.data.accountName;
@@ -267,8 +274,9 @@ export interface TransferToBankResult {
 
 /**
  * Initiate a bank transfer to a verified recipient.
- * POST /accounts/{subAccountId}/transfers/bank
+ * POST /v2/transfers/bank/{subAccountId}
  *
+ * Transfers live on v2 (not v1) — confirmed from Nomba API reference.
  * Scoped to the sub-account so funds are debited from the right account.
  * Authorization header still carries the parent accountId.
  *
@@ -298,7 +306,7 @@ export async function transferToBank(
 
   const response = await nombaRequest<TransferResponse>(
     "POST",
-    `/accounts/${SUB_ACCOUNT_ID}/transfers/bank`,
+    `/transfers/bank/${SUB_ACCOUNT_ID}`,
     {
       amount:        amountKobo,  // kobo
       bankCode,
@@ -307,7 +315,9 @@ export async function transferToBank(
       senderName:    "NairaRails",
       narration,
       merchantTxRef,
-    }
+    },
+    false,
+    BASE_URL_V2
   );
 
   const d = response.data;
@@ -349,10 +359,10 @@ export interface ListTransactionsResult {
 
 /**
  * List transactions from Nomba for a date range.
- * GET /accounts/{subAccountId}/transactions?dateFrom=&dateTo=&status=success
+ * GET /v1/transactions/accounts/{subAccountId}
  *
- * Scoped to the sub-account so we only see transactions belonging to the
- * virtual accounts created under it. Authorization header carries parent accountId.
+ * Correct v1 path per Nomba API reference — scoped to the sub-account.
+ * Authorization header carries parent accountId.
  *
  * Used by the reconciliation backstop to diff Nomba's view against
  * the local ledger_entries table. Reconcile by merchantTxRef — that's
@@ -384,7 +394,7 @@ export async function listTransactions(
 
   const response = await nombaRequest<TxResponse>(
     "GET",
-    `/accounts/${SUB_ACCOUNT_ID}/transactions?${qs.toString()}`
+    `/transactions/accounts/${SUB_ACCOUNT_ID}?${qs.toString()}`
   );
   const d = response.data;
 
