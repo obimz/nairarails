@@ -388,7 +388,7 @@ pnpm dev  # runs apps/web and apps/api together via Turborepo
 
 **Required environment variables:**
 ```env
-NOMBA_BASE_URL=https://sandbox.nomba.com/v1
+NOMBA_BASE_URL=https://api.nomba.com/v1
 NOMBA_CLIENT_ID=
 NOMBA_CLIENT_SECRET=
 NOMBA_ACCOUNT_ID=        # parent account ID — sent in the accountId header on every request

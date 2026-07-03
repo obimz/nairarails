@@ -74,6 +74,7 @@ enum OrderStatus {
   underpayment
   overpayment
   unmatched
+  expired       // VA expired with no payment received — terminal state, no further action expected
 
   @@map("order_status")
 }
