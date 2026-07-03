@@ -46,8 +46,26 @@ model Order {
 
   splits                Split[]
   ledgerEntries         LedgerEntry[]
+  merchantId            String   @map("merchant_id")
+  merchant              Merchant @relation(fields: [merchantId], references: [id], onDelete: Restrict)
 
   @@map("orders")
+}
+
+// ─── Merchants ───────────────────────────────────────────────────────────────
+// One row per marketplace merchant integrating with NairaRails.
+model Merchant {
+  id        String   @id @default(cuid()) @map("id")
+  name      String   @map("name")
+  email     String   @unique @map("email")
+  apiKey    String   @unique @default(cuid()) @map("api_key")
+  webhookUrl String? @map("webhook_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orders    Order[]
+
+  @@map("merchants")
 }
 
 enum OrderStatus {
