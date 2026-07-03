@@ -11,6 +11,22 @@ import { prisma } from "../lib/prisma.js";
 async function main() {
   console.log("── NairaRails Demo Seed ──\n");
 
+  const seedMerchant = await prisma.merchant.upsert({
+    where: { email: "demo@nairarails.dev" },
+    update: {
+      name: "Demo Marketplace",
+      apiKey: "nrk_live_demo_seed_key",
+      webhookUrl: null,
+    },
+    create: {
+      name: "Demo Marketplace",
+      email: "demo@nairarails.dev",
+      apiKey: "nrk_live_demo_seed_key",
+      webhookUrl: null,
+    },
+  });
+  console.log(`✓ Seed merchant ready: ${seedMerchant.email} (${seedMerchant.id})`);
+
   // Clean up any existing DEMO-* rows so re-runs are idempotent
   const demoRefs = ["DEMO-001", "DEMO-002", "DEMO-003", "DEMO-004", "DEMO-005"];
   await prisma.ledgerEntry.deleteMany({ where: { orderRef: { in: demoRefs } } });
@@ -22,6 +38,7 @@ async function main() {
   await prisma.order.create({
     data: {
       orderRef:             "DEMO-001",
+      merchantId:           seedMerchant.id,
       customerName:         "Chisom Traders",
       expectedAmountKobo:   BigInt(5000000),
       receivedAmountKobo:   BigInt(4800000),
@@ -57,6 +74,7 @@ async function main() {
   await prisma.order.create({
     data: {
       orderRef:             "DEMO-002",
+      merchantId:           seedMerchant.id,
       customerName:         "Emeka Okafor",
       expectedAmountKobo:   BigInt(5000000),
       receivedAmountKobo:   BigInt(5300000),
@@ -90,6 +108,7 @@ async function main() {
   await prisma.order.create({
     data: {
       orderRef:             "DEMO-003",
+      merchantId:           seedMerchant.id,
       customerName:         "Adaeze Foods",
       expectedAmountKobo:   BigInt(500000),
       receivedAmountKobo:   BigInt(500000),
@@ -121,6 +140,7 @@ async function main() {
   await prisma.order.create({
     data: {
       orderRef:             "DEMO-004",
+      merchantId:           seedMerchant.id,
       customerName:         "Tunde Logistics",
       expectedAmountKobo:   BigInt(1500000),
       receivedAmountKobo:   null,
@@ -143,6 +163,7 @@ async function main() {
   await prisma.order.create({
     data: {
       orderRef:             "DEMO-005",
+      merchantId:           seedMerchant.id,
       customerName:         "Unknown",
       expectedAmountKobo:   BigInt(0),
       receivedAmountKobo:   BigInt(800000),
