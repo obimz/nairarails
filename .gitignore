@@ -45,4 +45,5 @@ coverage/
 CLAUDE.md
 
 01-API-CONTRACT.md
-.claude/
+
+.env
