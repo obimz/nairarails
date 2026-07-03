@@ -42,19 +42,21 @@ function ReconciliationDrawer({ orderRef, onClose }: { orderRef: string; onClose
     <>
       <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <aside
-        className="fixed right-0 top-0 h-full w-full max-w-xl bg-[#0F172A] border-l border-white/10 shadow-2xl z-50 flex flex-col"
+        className="fixed right-0 top-0 h-full w-full max-w-xl shadow-2xl z-50 flex flex-col transition-colors duration-300"
+        style={{ background: "var(--bg-surface)", borderLeft: "1px solid var(--border)" }}
         aria-label="Reconciliation detail"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
           <div>
-            <p className="text-xs text-slate-500 mb-0.5 uppercase tracking-wider">Reconciliation</p>
-            <h3 className="font-semibold text-slate-50 font-mono">{orderRef}</h3>
+            <p className="text-xs mb-0.5 uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Reconciliation</p>
+            <h3 className="font-semibold font-mono" style={{ color: "var(--text-primary)" }}>{orderRef}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+            className="transition-colors cursor-pointer hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-[#16A97B]/50 rounded"
+            style={{ color: "var(--text-muted)" }}
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -128,7 +130,7 @@ function DrawerContent({ detail }: { detail: ReconciliationDetail }) {
           <div className="card-dark overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10">
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
                   {["Party", "%", "Amount", "Status"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                       {h}
@@ -163,7 +165,7 @@ function DrawerContent({ detail }: { detail: ReconciliationDetail }) {
       {/* Audit trail */}
       <section>
         <h4 className="text-sm font-semibold text-slate-300 mb-3">Audit Trail</h4>
-        <ol className="relative border-l border-white/10 ml-3 space-y-5">
+        <ol className="relative ml-3 space-y-5" style={{ borderLeft: "1px solid var(--border)" }}>
           {audit_trail.map((entry, i) => (
             <AuditItem key={i} entry={entry} />
           ))}
@@ -175,7 +177,7 @@ function DrawerContent({ detail }: { detail: ReconciliationDetail }) {
 
 function InfoCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+    <div className="rounded-lg px-3 py-2.5" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
       <p className="text-xs text-slate-500 mb-1">{label}</p>
       <div>{children}</div>
     </div>

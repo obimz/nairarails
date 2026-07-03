@@ -13,10 +13,13 @@ import { LayoutDashboard, Receipt, AlertTriangle, LogOut } from "lucide-react";
 import { queryClient }    from "./lib/queryClient.js";
 import { LandingPage }    from "./pages/LandingPage.js";
 import { OnboardingPage } from "./pages/OnboardingPage.js";
+import { LoginPage }      from "./pages/LoginPage.js";
 import { OverviewPage }   from "./pages/OverviewPage.js";
 import { OrdersPage }     from "./pages/OrdersPage.js";
 import { ExceptionsPage } from "./pages/ExceptionsPage.js";
 import { ProtectedRoute } from "./components/ProtectedRoute.js";
+import { ThemeProvider }  from "./contexts/ThemeContext.js";
+import { ThemeToggle }    from "./components/ThemeToggle.js";
 import "./index.css";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -31,16 +34,21 @@ const NAV_LINKS = [
 
 function DashboardLayout() {
   return (
-    <div className="flex min-h-screen bg-[#020617]">
+    <div className="flex min-h-screen transition-colors duration-300"
+         style={{ background: "var(--bg-base)" }}>
 
       {/* Sidebar */}
-      <aside className="hidden md:flex flex-col w-60 shrink-0 border-r border-white/10 bg-[#0F172A] fixed inset-y-0 left-0 z-30">
+      <aside
+        className="hidden md:flex flex-col w-60 shrink-0 fixed inset-y-0 left-0 z-30"
+        style={{ background: "var(--bg-surface)", borderRight: "1px solid var(--border)" }}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
-          <div className="w-7 h-7 rounded-lg bg-green-500 flex items-center justify-center shrink-0">
+        <div className="flex items-center gap-2.5 px-5 py-5"
+             style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="w-7 h-7 rounded-lg bg-[#16A97B] flex items-center justify-center shrink-0">
             <span className="text-black text-xs font-bold">₦</span>
           </div>
-          <span className="font-bold text-slate-50 tracking-tight">NairaRails</span>
+          <span className="font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>NairaRails</span>
         </div>
 
         {/* Nav links */}
@@ -49,9 +57,7 @@ function DashboardLayout() {
             <NavLink
               key={to}
               to={to}
-              className={({ isActive }) =>
-                isActive ? "nav-link-active" : "nav-link"
-              }
+              className={({ isActive }) => isActive ? "nav-link-active" : "nav-link"}
             >
               <Icon className="w-4 h-4 shrink-0" />
               {label}
@@ -60,9 +66,12 @@ function DashboardLayout() {
         </nav>
 
         {/* Bottom actions */}
-        <div className="px-3 py-4 border-t border-white/10 space-y-1">
-          <div className="px-3 py-2 text-xs text-slate-600 font-mono truncate">
+        <div className="px-3 py-4 space-y-1" style={{ borderTop: "1px solid var(--border)" }}>
+          <div className="px-3 py-2 text-xs font-mono truncate" style={{ color: "var(--text-muted)" }}>
             {import.meta.env["VITE_API_BASE"] ?? "localhost:3000"}
+          </div>
+          <div className="px-3 py-2">
+            <ThemeToggle showSystemOption />
           </div>
           <button
             type="button"
@@ -70,7 +79,7 @@ function DashboardLayout() {
               localStorage.removeItem("nairarails_api_key");
               window.location.href = "/signup";
             }}
-            className="nav-link w-full text-left text-slate-500 hover:text-red-400"
+            className="nav-link w-full text-left hover:text-red-500"
           >
             <LogOut className="w-4 h-4 shrink-0" />
             Sign out
@@ -79,7 +88,10 @@ function DashboardLayout() {
       </aside>
 
       {/* Mobile bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex border-t border-white/10 bg-[#0F172A]">
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex"
+        style={{ borderTop: "1px solid var(--border)", background: "var(--bg-surface)" }}
+      >
         {NAV_LINKS.map(({ label, to, icon: Icon }) => (
           <NavLink
             key={to}
@@ -87,9 +99,10 @@ function DashboardLayout() {
             className={({ isActive }) =>
               [
                 "flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors duration-150",
-                isActive ? "text-green-400" : "text-slate-500",
+                isActive ? "text-[#16A97B]" : "",
               ].join(" ")
             }
+            style={({ isActive }) => ({ color: isActive ? "var(--brand)" : "var(--text-muted)" })}
           >
             <Icon className="w-5 h-5" />
             <span>{label}</span>
@@ -113,6 +126,7 @@ function AppRoutes() {
       {/* Public */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/signup" element={<OnboardingPage />} />
+      <Route path="/login"  element={<LoginPage />} />
 
       {/* Protected dashboard */}
       <Route
@@ -141,10 +155,12 @@ if (!rootEl) throw new Error("Missing #root element in index.html");
 
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );
