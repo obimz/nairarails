@@ -1,7 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
+import {
+  BrowserRouter,
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+} from "react-router-dom";
 import { queryClient } from "./lib/queryClient.js";
+import { LandingPage }    from "./pages/LandingPage.js";
 import { OverviewPage }    from "./pages/OverviewPage.js";
 import { OrdersPage }      from "./pages/OrdersPage.js";
 import { ExceptionsPage }  from "./pages/ExceptionsPage.js";
@@ -10,18 +19,14 @@ import "./index.css";
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
 const NAV_LINKS = [
-  { label: "Overview",   page: "overview" },
-  { label: "Orders",     page: "orders" },
-  { label: "Exceptions", page: "exceptions" },
+  { label: "Overview",   to: "/dashboard/overview" },
+  { label: "Orders",     to: "/dashboard/orders" },
+  { label: "Exceptions", to: "/dashboard/exceptions" },
 ] as const;
-
-type Page = typeof NAV_LINKS[number]["page"];
 
 // ─── App shell ────────────────────────────────────────────────────────────────
 
-function App() {
-  const [currentPage, setCurrentPage] = React.useState<Page>("overview");
-
+function DashboardLayout() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Top nav */}
@@ -34,19 +39,19 @@ function App() {
         </div>
 
         <nav className="flex items-center gap-1" aria-label="Main navigation">
-          {NAV_LINKS.map(({ label, page }) => (
-            <button
-              key={page}
-              onClick={() => setCurrentPage(page)}
-              className={[
+          {NAV_LINKS.map(({ label, to }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => [
                 "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                currentPage === page
+                isActive
                   ? "bg-green-50 text-green-700"
                   : "text-gray-600 hover:bg-gray-100",
               ].join(" ")}
             >
               {label}
-            </button>
+            </NavLink>
           ))}
         </nav>
 
@@ -57,11 +62,26 @@ function App() {
 
       {/* Page content */}
       <main className="flex-1">
-        {currentPage === "overview"   && <OverviewPage />}
-        {currentPage === "orders"     && <OrdersPage />}
-        {currentPage === "exceptions" && <ExceptionsPage />}
+        <Outlet />
       </main>
     </div>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+
+      <Route path="/dashboard" element={<DashboardLayout />}>
+        <Route index element={<Navigate to="/dashboard/overview" replace />} />
+        <Route path="overview" element={<OverviewPage />} />
+        <Route path="orders" element={<OrdersPage />} />
+        <Route path="exceptions" element={<ExceptionsPage />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
@@ -73,7 +93,9 @@ if (!rootEl) throw new Error("Missing #root element in index.html");
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>
 );
