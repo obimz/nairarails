@@ -1,9 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NairaRails</title>
+    <meta name="theme-color" content="#0A0E14" id="theme-color-meta" />
+    <title>NairaRails — Programmable Payment Infrastructure</title>
+    <!-- Flash-prevention: apply saved or OS theme before React mounts -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('nairarails-theme');
+          var theme = (stored === 'light' || stored === 'dark')
+            ? stored
+            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.classList.remove('dark', 'light');
+          document.documentElement.classList.add(theme);
+          var meta = document.getElementById('theme-color-meta');
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#0A0E14' : '#FFFFFF');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

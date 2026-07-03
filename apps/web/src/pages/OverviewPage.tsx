@@ -69,10 +69,14 @@ function DarkTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0F172A] px-4 py-3 shadow-xl text-sm">
-      <p className="font-semibold text-slate-200 mb-1">{label}</p>
-      <p className="text-slate-400">
-        <span className="font-mono text-slate-100">{payload[0]?.value}</span> order{payload[0]?.value !== 1 ? "s" : ""}
+    <div
+      className="rounded-xl px-4 py-3 shadow-xl text-sm"
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+    >
+      <p className="font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{label}</p>
+      <p style={{ color: "var(--text-secondary)" }}>
+        <span className="font-mono" style={{ color: "var(--text-primary)" }}>{payload[0]?.value}</span>
+        {" "}order{payload[0]?.value !== 1 ? "s" : ""}
       </p>
     </div>
   );
