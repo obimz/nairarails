@@ -1,86 +1,177 @@
 // apps/api/src/scripts/seed.ts
 // Demo seed data — Phase 11.
-// Inserts 5 orders across all statuses so the dashboard is never empty during a demo,
-// even if live webhook timing doesn't cooperate in front of judges.
+// Inserts 5 orders across all statuses so the dashboard is never empty during a demo.
+// Also seeds splits and ledger entries so the reconciliation drawer looks complete.
 //
-// Run with: npx tsx --env-file=../../.env src/scripts/seed.ts
-// Safe to run multiple times — uses upsert so it won't create duplicates.
+// Run with:  npx tsx --env-file=../../.env src/scripts/seed.ts
+// Safe to run multiple times — deletes existing DEMO-* rows first, then re-inserts.
+
 import { prisma } from "../lib/prisma.js";
 
-const SEED_ORDERS = [
-  {
-    orderRef:            "DEMO-001",
-    customerName:        "Chisom Traders",
-    expectedAmountKobo:  BigInt(5000000),  // ₦50,000
-    receivedAmountKobo:  BigInt(4800000),  // ₦48,000 — underpayment
-    status:              "underpayment" as const,
-    virtualAccountNumber: "9900012345",
-    bankName:            "Nomba",
-    bankCode:            "000026",
-  },
-  {
-    orderRef:            "DEMO-002",
-    customerName:        "Emeka Okafor",
-    expectedAmountKobo:  BigInt(5000000),  // ₦50,000
-    receivedAmountKobo:  BigInt(5300000),  // ₦53,000 — overpayment
-    status:              "overpayment" as const,
-    virtualAccountNumber: "9900054321",
-    bankName:            "Nomba",
-    bankCode:            "000026",
-    senderAccountNumber: "0000000000",
-    senderBankCode:      "035",           // Wema Bank
-    senderName:          "Test Sender",
-  },
-  {
-    orderRef:            "DEMO-003",
-    customerName:        "Adaeze Foods",
-    expectedAmountKobo:  BigInt(500000),  // ₦5,000
-    receivedAmountKobo:  BigInt(500000),  // exact
-    status:              "paid" as const,
-    virtualAccountNumber: "9900099999",
-    bankName:            "Nomba",
-    bankCode:            "000026",
-  },
-  {
-    orderRef:            "DEMO-004",
-    customerName:        "Tunde Logistics",
-    expectedAmountKobo:  BigInt(1500000), // ₦15,000
-    receivedAmountKobo:  null,            // not yet paid
-    status:              "pending" as const,
-    virtualAccountNumber: "9900077777",
-    bankName:            "Nomba",
-    bankCode:            "000026",
-  },
-  {
-    orderRef:            "DEMO-005",
-    customerName:        "Ngozi Supplies",
-    expectedAmountKobo:  BigInt(2000000), // ₦20,000
-    receivedAmountKobo:  BigInt(500000),  // wrong amount — unmatched
-    status:              "unmatched" as const,
-    virtualAccountNumber: "9900088888",
-    bankName:            "Nomba",
-    bankCode:            "000026",
-  },
-] as const;
-
 async function main() {
-  console.log("── NairaRails Demo Seed ──");
+  console.log("── NairaRails Demo Seed ──\n");
 
-  for (const order of SEED_ORDERS) {
-    await prisma.order.upsert({
-      where:  { orderRef: order.orderRef },
-      update: order,
-      create: order,
-    });
-    console.log(`✓ Upserted order ${order.orderRef} [${order.status}]`);
-  }
+  // Clean up any existing DEMO-* rows so re-runs are idempotent
+  const demoRefs = ["DEMO-001", "DEMO-002", "DEMO-003", "DEMO-004", "DEMO-005"];
+  await prisma.ledgerEntry.deleteMany({ where: { orderRef: { in: demoRefs } } });
+  await prisma.split.deleteMany({       where: { orderRef: { in: demoRefs } } });
+  await prisma.order.deleteMany({       where: { orderRef: { in: demoRefs } } });
+  console.log("✓ Cleared existing DEMO-* rows\n");
 
-  console.log("\nSeed complete — dashboard should now show varied demo data.");
+  // ── DEMO-001: Underpayment — buyer paid ₦48,000 of ₦50,000 ──────────────────
+  await prisma.order.create({
+    data: {
+      orderRef:             "DEMO-001",
+      customerName:         "Chisom Traders",
+      expectedAmountKobo:   BigInt(5000000),
+      receivedAmountKobo:   BigInt(4800000),
+      status:               "underpayment",
+      virtualAccountNumber: "9900012345",
+      bankName:             "Nombank MFB",
+      bankCode:             "000026",
+      senderName:           "Chisom Nwosu",
+      senderAccountNumber:  "0000000000",
+      senderBankCode:       "035",
+      splits: {
+        create: [
+          { party: "seller",   accountNumber: "0000000000", bankCode: "035", percentage: 85, status: "blocked" },
+          { party: "platform", accountNumber: "0000000000", bankCode: "035", percentage: 10, status: "blocked" },
+          { party: "rider",    accountNumber: "0000000000", bankCode: "035", percentage: 5,  status: "blocked" },
+        ],
+      },
+      ledgerEntries: {
+        create: [
+          {
+            entryType:  "payment_received",
+            amountKobo: BigInt(4800000),
+            reference:  "txn_demo_001",
+            narration:  "Payment underpayment: received 4800000 kobo, expected 5000000 kobo",
+          },
+        ],
+      },
+    },
+  });
+  console.log("✓ DEMO-001 [underpayment] Chisom Traders — ₦48,000 of ₦50,000");
+
+  // ── DEMO-002: Overpayment — buyer paid ₦53,000 of ₦50,000, splits executed ──
+  await prisma.order.create({
+    data: {
+      orderRef:             "DEMO-002",
+      customerName:         "Emeka Okafor",
+      expectedAmountKobo:   BigInt(5000000),
+      receivedAmountKobo:   BigInt(5300000),
+      status:               "overpayment",
+      virtualAccountNumber: "9900054321",
+      bankName:             "Nombank MFB",
+      bankCode:             "000026",
+      senderName:           "Emeka Okafor",
+      senderAccountNumber:  "0000000000",
+      senderBankCode:       "035",
+      splits: {
+        create: [
+          { party: "seller",   accountNumber: "0000000000", bankCode: "035", percentage: 85, status: "executed", amountKobo: BigInt(4250000), nombaTransferRef: "txf_demo002_seller" },
+          { party: "platform", accountNumber: "0000000000", bankCode: "035", percentage: 10, status: "executed", amountKobo: BigInt(500000),  nombaTransferRef: "txf_demo002_platform" },
+          { party: "rider",    accountNumber: "0000000000", bankCode: "035", percentage: 5,  status: "executed", amountKobo: BigInt(250000),  nombaTransferRef: "txf_demo002_rider" },
+        ],
+      },
+      ledgerEntries: {
+        create: [
+          { entryType: "payment_received", amountKobo: BigInt(5300000),  reference: "txn_demo_002",          narration: "Payment overpayment: received 5300000 kobo, expected 5000000 kobo" },
+          { entryType: "split_payout",     amountKobo: BigInt(-4250000), reference: "txf_demo002_seller",    narration: "Split to seller: 4250000 kobo (85%)" },
+          { entryType: "split_payout",     amountKobo: BigInt(-500000),  reference: "txf_demo002_platform",  narration: "Split to platform: 500000 kobo (10%)" },
+          { entryType: "split_payout",     amountKobo: BigInt(-250000),  reference: "txf_demo002_rider",     narration: "Split to rider: 250000 kobo (5%)" },
+        ],
+      },
+    },
+  });
+  console.log("✓ DEMO-002 [overpayment]  Emeka Okafor   — ₦53,000 of ₦50,000, splits executed, excess ₦3,000 quarantined");
+
+  // ── DEMO-003: Paid — exact match, fully settled ───────────────────────────────
+  await prisma.order.create({
+    data: {
+      orderRef:             "DEMO-003",
+      customerName:         "Adaeze Foods",
+      expectedAmountKobo:   BigInt(500000),
+      receivedAmountKobo:   BigInt(500000),
+      status:               "paid",
+      virtualAccountNumber: "9900099999",
+      bankName:             "Nombank MFB",
+      bankCode:             "000026",
+      senderName:           "Adaeze Okwu",
+      senderAccountNumber:  "0000000000",
+      senderBankCode:       "035",
+      splits: {
+        create: [
+          { party: "seller",   accountNumber: "0000000000", bankCode: "035", percentage: 80, status: "executed", amountKobo: BigInt(400000), nombaTransferRef: "txf_demo003_seller" },
+          { party: "platform", accountNumber: "0000000000", bankCode: "035", percentage: 20, status: "executed", amountKobo: BigInt(100000), nombaTransferRef: "txf_demo003_platform" },
+        ],
+      },
+      ledgerEntries: {
+        create: [
+          { entryType: "payment_received", amountKobo: BigInt(500000),  reference: "txn_demo_003",         narration: "Payment paid: exact match" },
+          { entryType: "split_payout",     amountKobo: BigInt(-400000), reference: "txf_demo003_seller",   narration: "Split to seller: 400000 kobo (80%)" },
+          { entryType: "split_payout",     amountKobo: BigInt(-100000), reference: "txf_demo003_platform", narration: "Split to platform: 100000 kobo (20%)" },
+        ],
+      },
+    },
+  });
+  console.log("✓ DEMO-003 [paid]         Adaeze Foods   — ₦5,000 exact, splits executed");
+
+  // ── DEMO-004: Pending — awaiting payment ──────────────────────────────────────
+  await prisma.order.create({
+    data: {
+      orderRef:             "DEMO-004",
+      customerName:         "Tunde Logistics",
+      expectedAmountKobo:   BigInt(1500000),
+      receivedAmountKobo:   null,
+      status:               "pending",
+      virtualAccountNumber: "9900077777",
+      bankName:             "Nombank MFB",
+      bankCode:             "000026",
+      splits: {
+        create: [
+          { party: "seller",   accountNumber: "0000000000", bankCode: "035", percentage: 85, status: "pending" },
+          { party: "platform", accountNumber: "0000000000", bankCode: "035", percentage: 10, status: "pending" },
+          { party: "rider",    accountNumber: "0000000000", bankCode: "035", percentage: 5,  status: "pending" },
+        ],
+      },
+    },
+  });
+  console.log("✓ DEMO-004 [pending]      Tunde Logistics — ₦15,000 awaiting payment");
+
+  // ── DEMO-005: Unmatched — payment arrived with no order ───────────────────────
+  await prisma.order.create({
+    data: {
+      orderRef:             "DEMO-005",
+      customerName:         "Unknown",
+      expectedAmountKobo:   BigInt(0),
+      receivedAmountKobo:   BigInt(800000),
+      status:               "unmatched",
+      virtualAccountNumber: "9900088888",
+      bankName:             "Nombank MFB",
+      bankCode:             "000026",
+      senderName:           "Unknown Sender",
+      senderAccountNumber:  "0000000000",
+      senderBankCode:       "058",
+      ledgerEntries: {
+        create: [
+          { entryType: "payment_received", amountKobo: BigInt(800000), reference: "txn_demo_005", narration: "Unmatched payment — quarantined" },
+        ],
+      },
+    },
+  });
+  console.log("✓ DEMO-005 [unmatched]    Unknown        — ₦8,000 quarantined");
+
+  console.log("\n── Seed complete ───────────────────────────────────────");
+  console.log("  Dashboard: 1 paid, 1 pending, 1 underpayment, 1 overpayment, 1 unmatched");
+  console.log("  Exceptions queue: 3 items (DEMO-001, DEMO-002, DEMO-005)");
+  console.log("  DEMO-002 overpayment has sender details — Refund Excess button will work\n");
+
   await prisma.$disconnect();
 }
 
 main().catch(async (err) => {
-  console.error("✗ Seed failed:", err);
+  console.error("\n✗ Seed failed:", err);
   await prisma.$disconnect();
   process.exit(1);
 });

@@ -1,9 +1,12 @@
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { CreateOrderRequestSchema } from "@nairarails/shared-types";
-import { calculateSplits } from "@nairarails/webhook-core";
+import { calculateSplits, shortfallKobo, excessKobo } from "@nairarails/webhook-core";
 import { validate } from "../middleware/validate.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { prisma } from "../db/client.js";
+import { createVirtualAccount } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
 
 const router: ExpressRouter = Router();
@@ -21,28 +24,88 @@ router.post(
   validate(CreateOrderRequestSchema),
   async (req, res, next) => {
     try {
-      const { order_ref, customer_name, expected_amount_kobo, currency, splits } =
+      const { order_ref, customer_name, customer_email, expected_amount_kobo, currency, splits } =
         req.body as import("@nairarails/shared-types").CreateOrderRequest;
 
-      // Show the split allocations in the log so it's clear the math was done.
+      // Step 1: Insert order + splits atomically.
+      // Nomba call is intentionally OUTSIDE this transaction — if the VA call
+      // fails we still have the DB rows and can retry without duplicating data.
+      await prisma.$transaction(async (tx) => {
+        const existing = await tx.order.findUnique({ where: { orderRef: order_ref } });
+        if (existing) {
+          throw new AppError(409, "DUPLICATE_ORDER_REF", `Order ref '${order_ref}' already exists`);
+        }
+
+        await tx.order.create({
+          data: {
+            orderRef:           order_ref,
+            customerName:       customer_name,
+            customerEmail:      customer_email ?? null,
+            expectedAmountKobo: BigInt(expected_amount_kobo),
+            currency,
+            status:             "pending",
+          },
+        });
+
+        await tx.split.createMany({
+          data: splits.map((s) => ({
+            orderRef:      order_ref,
+            party:         s.party,
+            accountNumber: s.account_number,
+            bankCode:      s.bank_code,
+            percentage:    s.percentage,
+            status:        "pending" as const,
+          })),
+        });
+      });
+
+      // Step 2: Create the virtual account on Nomba.
+      // accountRef = order_ref so aliasAccountReference in the webhook maps
+      // back to this order with no secondary lookup.
+      // If this call fails, roll back the DB rows so the caller gets a clean
+      // error and can retry with the same order_ref — no orphaned DB rows.
+      let va: Awaited<ReturnType<typeof createVirtualAccount>>;
+      try {
+        va = await createVirtualAccount({
+          accountRef:         order_ref,
+          accountName:        customer_name,
+          expectedAmountKobo: expected_amount_kobo,
+        });
+      } catch (nombaErr) {
+        // Clean up the DB rows so this order_ref can be retried cleanly.
+        await prisma.order.delete({ where: { orderRef: order_ref } }).catch(() => {
+          // Best-effort — if delete fails, the orphaned row will be caught by
+          // the duplicate check on the next attempt.
+        });
+        logger.error({ order_ref, err: nombaErr }, "Nomba VA creation failed — DB order rolled back");
+        throw nombaErr;
+      }
+
+      // Step 3: Store the NUBAN back on the order row.
+      const order = await prisma.order.update({
+        where: { orderRef: order_ref },
+        data: {
+          virtualAccountNumber: va.accountNumber,
+          bankName:             va.bankName,
+          bankCode:             va.bankCode,
+        },
+      });
+
       const allocations = calculateSplits(expected_amount_kobo, splits);
       logger.info(
-        { order_ref, customer_name, expected_amount_kobo, allocations },
-        "Order created (stub — Phase 3 will write to DB + call Nomba VA)"
+        { order_ref, nuban: va.accountNumber, expected_amount_kobo, allocations },
+        "Order created with virtual account"
       );
 
-      // TODO (Phase 3): INSERT order + splits in a single DB transaction.
-      // TODO (Phase 4): call nombaClient.createVirtualAccount() and store the NUBAN.
-
       res.status(201).json({
-        order_ref,
-        virtual_account_number: "9900012345", // placeholder until Phase 4
-        bank_name: "Nomba",
-        bank_code: "000026",
-        expected_amount_kobo,
-        currency,
-        status: "pending",
-        created_at: new Date().toISOString(),
+        order_ref:              order.orderRef,
+        virtual_account_number: order.virtualAccountNumber ?? va.accountNumber,
+        bank_name:              order.bankName              ?? va.bankName,
+        bank_code:              order.bankCode              ?? va.bankCode,
+        expected_amount_kobo:   Number(order.expectedAmountKobo),
+        currency:               order.currency,
+        status:                 order.status,
+        created_at:             order.createdAt.toISOString(),
       });
     } catch (err) {
       next(err);
@@ -57,44 +120,46 @@ router.get("/orders", async (req, res, next) => {
     if (!query.success) {
       throw new AppError(422, "VALIDATION_ERROR", "Invalid query parameters");
     }
-    const { page, page_size } = query.data;
+    const { page, page_size, status } = query.data;
+    const skip = (page - 1) * page_size;
 
-    // TODO (Phase 3): SELECT from orders with pagination + status filter.
-    logger.info({ page, page_size }, "Listing orders (stub)");
+    // Build a status filter only when one was requested.
+    const where: Prisma.OrderWhereInput = status
+      ? { status: status as Prisma.EnumOrderStatusFilter }
+      : {};
+
+    const [orders, total_count] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: page_size,
+        select: {
+          orderRef:             true,
+          customerName:         true,
+          expectedAmountKobo:   true,
+          receivedAmountKobo:   true,
+          status:               true,
+          virtualAccountNumber: true,
+          createdAt:            true,
+        },
+      }),
+      prisma.order.count({ where }),
+    ]);
 
     res.status(200).json({
-      results: [
-        {
-          order_ref:              "ORD-9821",
-          customer_name:          "Chisom Traders",
-          expected_amount_kobo:   5000000,
-          received_amount_kobo:   4800000,
-          status:                 "underpayment",
-          virtual_account_number: "9900012345",
-          created_at:             "2026-06-28T09:00:00.000Z",
-        },
-        {
-          order_ref:              "ORD-1144",
-          customer_name:          "Emeka Okafor",
-          expected_amount_kobo:   5000000,
-          received_amount_kobo:   5300000,
-          status:                 "overpayment",
-          virtual_account_number: "9900054321",
-          created_at:             "2026-06-28T10:00:00.000Z",
-        },
-        {
-          order_ref:              "ORD-0077",
-          customer_name:          "Adaeze Foods",
-          expected_amount_kobo:   500000,
-          received_amount_kobo:   500000,
-          status:                 "paid",
-          virtual_account_number: "9900099999",
-          created_at:             "2026-06-28T11:00:00.000Z",
-        },
-      ],
+      results: orders.map((o) => ({
+        order_ref:              o.orderRef,
+        customer_name:          o.customerName,
+        expected_amount_kobo:   Number(o.expectedAmountKobo),
+        received_amount_kobo:   o.receivedAmountKobo !== null ? Number(o.receivedAmountKobo) : null,
+        status:                 o.status,
+        virtual_account_number: o.virtualAccountNumber ?? "",
+        created_at:             o.createdAt.toISOString(),
+      })),
       page,
       page_size,
-      total_count: 3,
+      total_count,
     });
   } catch (err) {
     next(err);
@@ -106,29 +171,53 @@ router.get("/orders/:order_ref/reconciliation", async (req, res, next) => {
   try {
     const { order_ref } = req.params as { order_ref: string };
 
-    // TODO (Phase 3): JOIN orders + splits + ledger_entries + webhook_events.
-    logger.info({ order_ref }, "Reconciliation detail requested (stub)");
+    // Fetch order + splits + ledger entries in one query.
+    const order = await prisma.order.findUnique({
+      where: { orderRef: order_ref },
+      include: {
+        splits:       { orderBy: { createdAt: "asc" } },
+        ledgerEntries: { orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    if (!order) {
+      throw new AppError(404, "ORDER_NOT_FOUND", `Order '${order_ref}' not found`);
+    }
+
+    const expected = Number(order.expectedAmountKobo);
+    const received = order.receivedAmountKobo !== null ? Number(order.receivedAmountKobo) : null;
+    const splitsExecuted = order.splits.some((s) => s.status === "executed");
+
+    // Build audit trail from ledger entries.
+    // va_created entry is synthesised from the order's createdAt timestamp.
+    const auditTrail: Array<Record<string, unknown>> = [
+      { event: "va_created", timestamp: order.createdAt.toISOString() },
+      ...order.ledgerEntries.map((e) => ({
+        event:      e.entryType,
+        amount_kobo: Number(e.amountKobo),
+        timestamp:  e.createdAt.toISOString(),
+        ...(e.narration ? { detail: e.narration } : {}),
+        ...(e.reference  ? { reference: e.reference } : {}),
+      })),
+    ];
 
     res.status(200).json({
-      order_ref,
-      virtual_account_number:  "9900012345",
-      expected_amount_kobo:    5000000,
-      received_amount_kobo:    4800000,
-      status:                  "underpayment",
-      shortfall_kobo:          200000,
-      excess_kobo:             0,
-      splits_executed:         false,
-      splits: [
-        { party: "seller",   percentage: 85, amount_paid_kobo: null, status: "blocked", nomba_transfer_ref: null },
-        { party: "platform", percentage: 10, amount_paid_kobo: null, status: "blocked", nomba_transfer_ref: null },
-        { party: "rider",    percentage: 5,  amount_paid_kobo: null, status: "blocked", nomba_transfer_ref: null },
-      ],
-      audit_trail: [
-        { event: "va_created",       timestamp: "2026-06-28T09:00:00.000Z" },
-        { event: "payment_received", amount_kobo: 4800000, timestamp: "2026-06-28T14:32:11.000Z" },
-        { event: "classified",       status: "underpayment", timestamp: "2026-06-28T14:32:11.000Z" },
-        { event: "notification_sent", channel: "dashboard", timestamp: "2026-06-28T14:32:12.000Z" },
-      ],
+      order_ref:              order.orderRef,
+      virtual_account_number: order.virtualAccountNumber ?? "",
+      expected_amount_kobo:   expected,
+      received_amount_kobo:   received,
+      status:                 order.status,
+      shortfall_kobo:         received !== null ? shortfallKobo(expected, received) : 0,
+      excess_kobo:            received !== null ? excessKobo(expected, received) : 0,
+      splits_executed:        splitsExecuted,
+      splits: order.splits.map((s) => ({
+        party:              s.party,
+        percentage:         s.percentage,
+        amount_paid_kobo:   s.amountKobo !== null ? Number(s.amountKobo) : null,
+        status:             s.status,
+        nomba_transfer_ref: s.nombaTransferRef ?? null,
+      })),
+      audit_trail: auditTrail,
     });
   } catch (err) {
     next(err);

@@ -88,6 +88,9 @@ importers:
       '@nairarails/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: ^22.20.0
+        version: 22.20.0
       '@types/react':
         specifier: ^19.1.8
         version: 19.2.17
