@@ -1,7 +1,7 @@
 import React from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html, Line } from "@react-three/drei";
-import type { Mesh } from "three";
+import type { Mesh, Group } from "three";
 
 type Vec3 = [number, number, number];
 
@@ -65,7 +65,7 @@ function EdgePulse({ from, to, phaseOffset }: { from: Vec3; to: Vec3; phaseOffse
 }
 
 function BankNetwork() {
-  const groupRef = React.useRef<THREE.Group>(null);
+  const groupRef = React.useRef<Group>(null);
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current) return;
