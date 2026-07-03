@@ -33,6 +33,7 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+.kiro/
 *.swp
 *.swo
 
