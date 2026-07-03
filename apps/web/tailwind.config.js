@@ -25,9 +25,27 @@ export default {
           overpayment:  "#9333ea", // purple-600
           unmatched:    "#6b7280", // gray-500
         },
+        // Redesign tokens (landing page specific)
+        rail: {
+          night: "#0A0E14",
+          steel: "#1C2430",
+        },
+        settlement: {
+          green: "#16A97B",
+        },
+        exception: {
+          amber: "#E8A33D",
+        },
+        ledger: {
+          white: "#EDEEEB",
+        },
+        muted: {
+          slate: "#7C8896",
+        },
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Space Grotesk", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "monospace"],
       },
     },

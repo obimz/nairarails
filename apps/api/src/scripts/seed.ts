@@ -11,21 +11,28 @@ import { prisma } from "../lib/prisma.js";
 async function main() {
   console.log("── NairaRails Demo Seed ──\n");
 
+  const webhookUrl = process.env["DEMO_MERCHANT_WEBHOOK_URL"] ?? null;
+
   const seedMerchant = await prisma.merchant.upsert({
     where: { email: "demo@nairarails.dev" },
     update: {
-      name: "Demo Marketplace",
-      apiKey: "nrk_live_demo_seed_key",
-      webhookUrl: null,
+      name:       "Demo Marketplace",
+      apiKey:     "nrk_live_demo_seed_key",
+      webhookUrl: webhookUrl,
     },
     create: {
-      name: "Demo Marketplace",
-      email: "demo@nairarails.dev",
-      apiKey: "nrk_live_demo_seed_key",
-      webhookUrl: null,
+      name:       "Demo Marketplace",
+      email:      "demo@nairarails.dev",
+      apiKey:     "nrk_live_demo_seed_key",
+      webhookUrl: webhookUrl,
     },
   });
   console.log(`✓ Seed merchant ready: ${seedMerchant.email} (${seedMerchant.id})`);
+  if (webhookUrl) {
+    console.log(`  webhookUrl: ${webhookUrl}`);
+  } else {
+    console.log("  webhookUrl: not set — set DEMO_MERCHANT_WEBHOOK_URL in .env to test outbound notifications");
+  }
 
   // Clean up any existing DEMO-* rows so re-runs are idempotent
   const demoRefs = ["DEMO-001", "DEMO-002", "DEMO-003", "DEMO-004", "DEMO-005"];

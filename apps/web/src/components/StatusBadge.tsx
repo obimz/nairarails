@@ -1,29 +1,20 @@
-/**
- * StatusBadge — coloured pill for order/exception status.
- * Uses the .badge-* classes defined in index.css.
- */
-
-import type { OrderListItem } from "../hooks/index.js";
-
-type Status = OrderListItem["status"];
-
-const LABELS: Record<Status, string> = {
-  paid:         "Paid",
-  pending:      "Pending",
-  underpayment: "Underpayment",
-  overpayment:  "Overpayment",
-  unmatched:    "Unmatched",
-};
-
-interface Props {
-  status: Status;
-  className?: string;
+interface StatusBadgeProps {
+  status: string;
 }
 
-export function StatusBadge({ status, className = "" }: Props) {
+const STATUS_MAP: Record<string, string> = {
+  paid:         "badge-paid",
+  pending:      "badge-pending",
+  underpayment: "badge-underpayment",
+  overpayment:  "badge-overpayment",
+  unmatched:    "badge-unmatched",
+};
+
+export function StatusBadge({ status }: StatusBadgeProps) {
+  const cls = STATUS_MAP[status] ?? "badge-unmatched";
   return (
-    <span className={`badge-${status} ${className}`.trim()}>
-      {LABELS[status]}
+    <span className={cls}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
 }

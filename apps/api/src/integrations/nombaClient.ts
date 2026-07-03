@@ -12,7 +12,8 @@
 
 import { logger } from "../lib/logger.js";
 
-const BASE_URL    = process.env["NOMBA_BASE_URL"]    ?? "https://sandbox.api.nomba.com/v1";
+// Confirmed real sandbox base URL (not sandbox.api.nomba.com — that's wrong per verified Nomba docs)
+const BASE_URL    = process.env["NOMBA_BASE_URL"]    ?? "https://sandbox.nomba.com/v1";
 const ACCOUNT_ID  = process.env["NOMBA_ACCOUNT_ID"]  ?? "";
 const CLIENT_ID   = process.env["NOMBA_CLIENT_ID"]   ?? "";
 const CLIENT_SECRET = process.env["NOMBA_CLIENT_SECRET"] ?? "";

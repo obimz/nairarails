@@ -10,10 +10,12 @@ import {
   NombaWebhookEnvelopeSchema,
   NOMBA_SIGNATURE_HEADER,
   NOMBA_TIMESTAMP_HEADER,
+  NOMBA_SIG_VALUE_HEADER,
 } from "@nairarails/shared-types";
 import { prisma } from "../db/client.js";
 import { lookupBankAccount, transferToBank } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
+import { notifyMerchant } from "../lib/notifyMerchant.js";
 
 const router: ExpressRouter = Router();
 
@@ -61,7 +63,7 @@ router.post(
       return;
     }
 
-    const signatureHeader = req.headers[NOMBA_SIGNATURE_HEADER];
+    const signatureHeader = req.headers[NOMBA_SIGNATURE_HEADER] ?? req.headers[NOMBA_SIG_VALUE_HEADER];
     const timestamp       = req.headers[NOMBA_TIMESTAMP_HEADER];
 
     if (typeof signatureHeader !== "string" || typeof timestamp !== "string") {
@@ -159,7 +161,10 @@ router.post(
         return;
       }
 
-      const order = await prisma.order.findUnique({ where: { orderRef } });
+      const order = await prisma.order.findUnique({
+        where:   { orderRef },
+        include: { merchant: true },
+      });
       if (!order) {
         logger.warn({ requestId, orderRef }, "No order found for aliasAccountReference — quarantining");
         res.status(200).json({ status: "unmatched_quarantined", requestId });
@@ -291,9 +296,23 @@ router.post(
           }
         }
       }
+
+      // ── 8. Notify the merchant (fire-and-forget) ───────────────────────────
+      // Post a payment.classified event to the merchant's registered webhookUrl.
+      // Never await this in a way that can delay the 200 response to Nomba.
+      // notifyMerchant catches all errors internally — it will never throw.
+      void notifyMerchant(order.merchant, {
+        event:                "payment.classified",
+        order_ref:            orderRef,
+        status:               classification,
+        received_amount_kobo: receivedKobo,
+        expected_amount_kobo: expectedKobo,
+        splits_executed:      classification === "paid" || classification === "overpayment",
+        timestamp:            new Date().toISOString(),
+      });
     }
 
-    // ── 8. Always respond 200 ─────────────────────────────────────────────────
+    // ── 9. Always respond 200 ─────────────────────────────────────────────────
     // Respond 200 once the event is safely recorded — Nomba will not retry.
     res.status(200).json({
       status:        "ok",

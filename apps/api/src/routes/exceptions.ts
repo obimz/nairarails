@@ -6,6 +6,7 @@ import { prisma } from "../db/client.js";
 import { lookupBankAccount, transferToBank } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 
 const router: ExpressRouter = Router();
 
@@ -14,10 +15,12 @@ const ExceptionQuerySchema = z.object({
 });
 
 // ─── GET /api/v1/exceptions ───────────────────────────────────────────────────
-// Returns all orders in a non-normal state (underpayment / overpayment / unmatched).
+// Returns all exception-state orders belonging to the calling merchant.
 // Optionally filtered by type via ?type=overpayment.
-router.get("/exceptions", async (req, res, next) => {
+router.get("/exceptions", apiKeyAuth, async (req, res, next) => {
   try {
+    const merchant = res.locals.merchant;
+
     const query = ExceptionQuerySchema.safeParse(req.query);
     if (!query.success) {
       throw new AppError(422, "VALIDATION_ERROR", "Invalid query parameters");
@@ -32,7 +35,7 @@ router.get("/exceptions", async (req, res, next) => {
       : { in: ["underpayment", "overpayment", "unmatched"] as OrderStatus[] };
 
     const orders = await prisma.order.findMany({
-      where:   { status: statusFilter },
+      where:   { status: statusFilter, merchantId: merchant.id },
       orderBy: { updatedAt: "desc" },
       select: {
         orderRef:           true,
@@ -43,7 +46,7 @@ router.get("/exceptions", async (req, res, next) => {
       },
     });
 
-    logger.info({ filter: type ?? "all", count: orders.length }, "Exceptions listed");
+    logger.info({ filter: type ?? "all", count: orders.length, merchantId: merchant.id }, "Exceptions listed");
 
     res.status(200).json({
       results: orders.map((o) => {
@@ -57,7 +60,7 @@ router.get("/exceptions", async (req, res, next) => {
           shortfall_kobo:       shortfallKobo(expected, received),
           excess_kobo:          excessKobo(expected, received),
           raised_at:            o.updatedAt.toISOString(),
-          resolved:             false,   // Phase 4 adds a resolved status via refund flow
+          resolved:             false,
           resolved_at:          null,
         };
       }),
@@ -69,14 +72,17 @@ router.get("/exceptions", async (req, res, next) => {
 });
 
 // ─── POST /api/v1/exceptions/:order_ref/refund-excess ────────────────────────
-// Validates the order is an overpayment with captured sender details, then
-// Phase 4 will call Nomba to transfer the excess back to the original payer.
-router.post("/exceptions/:order_ref/refund-excess", async (req, res, next) => {
+// Validates the order is an overpayment belonging to the calling merchant,
+// then transfers the excess back to the original payer via Nomba.
+router.post("/exceptions/:order_ref/refund-excess", apiKeyAuth, async (req, res, next) => {
   try {
+    const merchant = res.locals.merchant;
     const { order_ref } = req.params as { order_ref: string };
 
     const order = await prisma.order.findUnique({ where: { orderRef: order_ref } });
-    if (!order) {
+
+    // Treat wrong-merchant orders as 404 — don't leak other merchants' data
+    if (!order || order.merchantId !== merchant.id) {
       throw new AppError(404, "ORDER_NOT_FOUND", `Order '${order_ref}' not found`);
     }
 
@@ -108,6 +114,7 @@ router.post("/exceptions/:order_ref/refund-excess", async (req, res, next) => {
       {
         order_ref,
         refundKobo,
+        merchantId:    merchant.id,
         senderAccount: order.senderAccountNumber,
         senderBank:    order.senderBankCode,
       },

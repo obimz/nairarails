@@ -10,12 +10,6 @@ import { AppError } from "../middleware/errorHandler.js";
 
 const router: ExpressRouter = Router();
 
-// ─── GET /api/v1/health ───────────────────────────────────────────────────────
-// Named explicitly in the Nomba checklist — judges may hit this directly.
-router.get("/health", (_req, res) => {
-  res.status(200).json({ status: "healthy", timestamp: new Date().toISOString() });
-});
-
 // ─── Query schema ─────────────────────────────────────────────────────────────
 const ReconcileQuerySchema = z.object({
   // Default to today if not provided
