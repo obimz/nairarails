@@ -388,10 +388,14 @@ pnpm dev  # runs apps/web and apps/api together via Turborepo
 
 **Required environment variables:**
 ```env
-NOMBA_BASE_URL=https://sandbox.api.nomba.com/v1
+NOMBA_BASE_URL=https://sandbox.nomba.com/v1
 NOMBA_CLIENT_ID=
 NOMBA_CLIENT_SECRET=
-NOMBA_ACCOUNT_ID=
+NOMBA_ACCOUNT_ID=        # parent account ID — sent in the accountId header on every request
+NOMBA_SUB_ACCOUNT_ID=    # sub-account ID — used as path param in /accounts/virtual/{subAccountId}
+                         # webhooks only fire when virtual accounts are created via the subaccount
+                         # route; the generic /accounts/virtual endpoint provisions the account
+                         # but Nomba never delivers webhook events for it
 NOMBA_WEBHOOK_SECRET=
 DATABASE_URL=
 DIRECT_URL=
