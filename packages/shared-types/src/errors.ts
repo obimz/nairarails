@@ -9,8 +9,10 @@ export const ErrorCodeEnum = z.enum([
   "VALIDATION_ERROR",           // Field present but fails a business rule (422).
   "ORDER_NOT_FOUND",            // No order matches the given order_ref (404).
   "EXCEPTION_NOT_FOUND",        // No open exception for the given order_ref (404).
+  "MERCHANT_NOT_FOUND",         // No merchant matches the provided identifier (404).
   "SPLITS_DO_NOT_SUM_TO_100",   // Split percentages do not total 100 (422).
   "DUPLICATE_ORDER_REF",        // order_ref already exists (409).
+  "DUPLICATE_MERCHANT_EMAIL",   // merchant email already exists (409).
   "DUPLICATE_WEBHOOK_EVENT",    // requestId already processed — silently ignored internally.
   "NOMBA_AUTH_FAILED",          // Could not obtain or refresh the Nomba access token (502).
   "NOMBA_VA_CREATION_FAILED",   // Nomba rejected the virtual account creation request (502).
