@@ -48,3 +48,7 @@ CLAUDE.md
 01-API-CONTRACT.md
 
 .env
+
+# Local dev utility scripts
+gen-sig.mjs
+hardening-test.mjs
