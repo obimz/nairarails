@@ -1,17 +1,21 @@
 /**
- * apiKeyAuth — middleware that authenticates requests via the `x-api-key` header.
+ * apiKeyAuth — authenticates requests via the `x-api-key` header.
  *
- * On success: sets `res.locals.merchant` to the full Merchant row so downstream
- * handlers can read `res.locals.merchant.id` for per-merchant data scoping.
+ * Keys are stored as SHA-256 hashes — the plaintext is never in the DB.
+ * Lookup: hash the incoming key, then find by apiKeyHash.
+ * Also checks apiKeyExpiresAt if set.
  *
- * On failure: returns 401 with a structured error matching the API contract.
+ * On success: sets res.locals.merchant to the full Merchant row.
+ * On failure: 401 with a structured error.
  *
- * Routes that stay public (no apiKeyAuth):
- *   POST /api/v1/merchants/signup  — by definition unauthenticated
- *   POST /api/v1/webhooks/nomba   — authenticated by Nomba HMAC signature, not API key
- *   GET  /health, GET /           — always public
+ * Public routes (no apiKeyAuth):
+ *   POST /api/v1/auth/register   — unauthenticated by definition
+ *   POST /api/v1/auth/login      — unauthenticated by definition
+ *   POST /api/v1/webhooks/nomba  — authenticated by Nomba HMAC, not API key
+ *   GET  /health                 — always public
  */
 
+import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
 import type { Merchant } from "@prisma/client";
 import { prisma } from "../db/client.js";
@@ -36,23 +40,36 @@ export async function apiKeyAuth(
 
   if (!key || typeof key !== "string") {
     res.status(401).json({
-      error: {
-        code: "MISSING_API_KEY",
-        message: "Request requires an x-api-key header",
-      },
+      error: { code: "MISSING_API_KEY", message: "Request requires an x-api-key header" },
     });
     return;
   }
 
-  const merchant = await prisma.merchant.findUnique({ where: { apiKey: key } });
+  // Hash the incoming key and look up by hash — never compare plaintext
+  const hash = crypto.createHash("sha256").update(key).digest("hex");
+  const merchant = await prisma.merchant.findUnique({ where: { apiKeyHash: hash } });
 
   if (!merchant) {
     logger.warn({ path: req.path }, "Invalid API key rejected");
     res.status(401).json({
-      error: {
-        code: "INVALID_API_KEY",
-        message: "The provided API key is not valid",
-      },
+      error: { code: "INVALID_API_KEY", message: "The provided API key is not valid" },
+    });
+    return;
+  }
+
+  // Check expiry if set
+  if (merchant.apiKeyExpiresAt && merchant.apiKeyExpiresAt < new Date()) {
+    logger.warn({ path: req.path, merchantId: merchant.id }, "Expired API key rejected");
+    res.status(401).json({
+      error: { code: "INVALID_API_KEY", message: "This API key has expired — rotate it from your dashboard" },
+    });
+    return;
+  }
+
+  // Check email is verified
+  if (!merchant.emailVerified) {
+    res.status(403).json({
+      error: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email address before using the API" },
     });
     return;
   }

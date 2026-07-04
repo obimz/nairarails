@@ -9,6 +9,7 @@ const STATUS_MAP: Record<string, string> = {
   overpayment:  "badge-overpayment",
   unmatched:    "badge-unmatched",
   expired:      "badge-expired",
+  refunded:     "badge-unmatched",  // neutral grey — closed/resolved state
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {

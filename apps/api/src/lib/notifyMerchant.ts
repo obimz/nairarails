@@ -18,8 +18,17 @@
  */
 
 import type { Merchant } from "@prisma/client";
-import type { MerchantWebhookPayload } from "@nairarails/shared-types";
 import { logger } from "./logger.js";
+
+interface MerchantWebhookPayload {
+  event:                string;
+  order_ref:            string;
+  status:               string;
+  received_amount_kobo: number;
+  expected_amount_kobo: number;
+  splits_executed:      boolean;
+  timestamp:            string;
+}
 
 export async function notifyMerchant(
   merchant: Merchant,

@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react";
+import { LogoMark } from "../components/Logo.js";
 import {
   Search, Trash2, Clock, RotateCcw, GitCompare,
   LogOut, ChevronDown, ChevronUp, AlertTriangle, CheckCircle,
@@ -169,9 +170,7 @@ function AdminLogin({ onAuth }: { onAuth: (secret: string) => void }) {
       <div className="w-full max-w-sm rounded-2xl p-8 border"
            style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
         <div className="flex items-center gap-2.5 mb-6">
-          <div className="w-8 h-8 rounded-lg bg-[#16A97B] flex items-center justify-center">
-            <span className="text-black text-sm font-bold">₦</span>
-          </div>
+          <LogoMark size={32} />
           <div>
             <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>NairaRails</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Admin Panel</p>
@@ -440,9 +439,7 @@ export function AdminPage() {
         style={{ background: "var(--bg-surface)", borderBottom: "1px solid var(--border)" }}
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-[#16A97B] flex items-center justify-center">
-            <span className="text-black text-xs font-bold">₦</span>
-          </div>
+          <LogoMark size={28} />
           <div>
             <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>NairaRails</span>
             <span

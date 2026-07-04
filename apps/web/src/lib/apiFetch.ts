@@ -1,35 +1,50 @@
 /**
  * apiFetch — the single fetch wrapper for all API calls.
  *
- * Reads VITE_API_BASE from the environment (set to the mock server port
- * during Phase 7, swapped to the real API in Phase 9).
- *
- * On non-2xx responses, parses the contract error shape
- * { error: { code, message, field? } } and throws an ApiError so every
- * caller can catch a single, typed error class rather than raw fetch errors.
- *
- * Phase 16: Reads the stored API key from localStorage and attaches it as
- * `x-api-key` on every request to /api/v1/* — except the two public routes
- * that must never carry an API key:
- *   - POST /api/v1/merchants/signup  (issues the key, can't have one yet)
- *   - POST /api/v1/webhooks/nomba    (authenticated by Nomba HMAC, not API key)
+ * Auth strategy (post Phase E):
+ *   - Dashboard routes (/api/v1/auth/*, /api/v1/merchants/keys/*, /api/v1/dashboard/*)
+ *     → attach Supabase session JWT as `Authorization: Bearer <token>`
+ *   - Programmatic routes (/api/v1/orders, /api/v1/exceptions, etc.)
+ *     → attach `x-api-key` from localStorage (backwards compat for demo seed key)
+ *   - Public routes (register, login, webhooks) → no auth header
  */
+
+import { supabase } from "./supabase.js";
 
 const API_BASE = import.meta.env["VITE_API_BASE"] as string | undefined ?? "http://localhost:3000";
 
-// Paths that must never have an x-api-key header attached, even if one is stored.
-const PUBLIC_PATHS = [
-  "/api/v1/merchants/signup",
-  "/api/v1/webhooks/nomba",
+// Routes that use JWT (Supabase session) instead of x-api-key
+const JWT_PATHS = [
+  "/api/v1/auth/logout",
+  "/api/v1/auth/me",
+  "/api/v1/merchants/keys",   // GET key info + POST issue/rotate/revoke
+  "/api/v1/merchants/profile", // PATCH profile
+  "/api/v1/dashboard",
 ];
 
-function getApiKeyHeader(path: string): Record<string, string> {
+// Routes that require no auth header at all
+const PUBLIC_PATHS = [
+  "/api/v1/auth/register",
+  "/api/v1/auth/login",
+  "/api/v1/webhooks/nomba",
+  "/api/v1/merchants/signup", // legacy — kept for seed key compat
+];
+
+async function getAuthHeader(path: string): Promise<Record<string, string>> {
   const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
   if (isPublic) return {};
 
+  const isJwt = JWT_PATHS.some((p) => path.startsWith(p));
+  if (isJwt) {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) return { "Authorization": `Bearer ${token}` };
+    return {};
+  }
+
+  // Programmatic route — use x-api-key from localStorage
   const key = localStorage.getItem("nairarails_api_key");
   if (!key) return {};
-
   return { "x-api-key": key };
 }
 
@@ -58,12 +73,14 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
 
+  const authHeader = await getAuthHeader(path);
+
   let res: Response;
   try {
     res = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
-        ...getApiKeyHeader(path),
+        ...authHeader,
         ...(init?.headers ?? {}),
       },
       ...init,
@@ -124,7 +141,7 @@ export async function adminFetch<T>(
         "Content-Type":    "application/json",
         "x-admin-secret":  secret,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : null,
     });
   } catch (networkErr) {
     throw new Error(`Network error reaching ${url}: ${String(networkErr)}`);

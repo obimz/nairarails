@@ -7,24 +7,38 @@
 // Safe to run multiple times — deletes existing DEMO-* rows first, then re-inserts.
 
 import { prisma } from "../lib/prisma.js";
+import { generateApiKey } from "../lib/generateApiKey.js";
+import crypto from "crypto";
 
 async function main() {
   console.log("── NairaRails Demo Seed ──\n");
 
   const webhookUrl = process.env["DEMO_MERCHANT_WEBHOOK_URL"] ?? null;
 
+  // The demo seed key is fixed so existing Thunder Client collections keep working.
+  // We hash it and store the hash — exactly like a real key.
+  const DEMO_RAW_KEY = "nrk_live_demo_seed_key";
+  const demoHash     = crypto.createHash("sha256").update(DEMO_RAW_KEY).digest("hex");
+  const demoPrefix   = DEMO_RAW_KEY.slice(0, 20);
+
   const seedMerchant = await prisma.merchant.upsert({
     where: { email: "demo@nairarails.dev" },
     update: {
-      name:       "Demo Marketplace",
-      apiKey:     "nrk_live_demo_seed_key",
-      webhookUrl: webhookUrl,
+      name:          "Demo Marketplace",
+      apiKeyHash:    demoHash,
+      apiKeyPrefix:  demoPrefix,
+      apiKeyIssuedAt: new Date(),
+      emailVerified: true,
+      webhookUrl:    webhookUrl,
     },
     create: {
-      name:       "Demo Marketplace",
-      email:      "demo@nairarails.dev",
-      apiKey:     "nrk_live_demo_seed_key",
-      webhookUrl: webhookUrl,
+      name:          "Demo Marketplace",
+      email:         "demo@nairarails.dev",
+      apiKeyHash:    demoHash,
+      apiKeyPrefix:  demoPrefix,
+      apiKeyIssuedAt: new Date(),
+      emailVerified: true,
+      webhookUrl:    webhookUrl,
     },
   });
   console.log(`✓ Seed merchant ready: ${seedMerchant.email} (${seedMerchant.id})`);

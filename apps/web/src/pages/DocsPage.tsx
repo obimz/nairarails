@@ -1,487 +1,398 @@
 /**
- * DocsPage.tsx — NairaRails API Reference
+ * DocsPage.tsx — NairaRails developer documentation
  *
- * Sidebar navigation + right-hand content panel.
- * All endpoint shapes are taken directly from the actual implementation.
+ * Sidebar nav driven by DOCS_NAV manifest. Content rendered from .md files
+ * via react-markdown + remark-gfm + rehype-highlight.
+ *
+ * Adding a new doc page: add an entry to src/lib/docsNav.ts and a
+ * corresponding .md file in src/docs/. No changes needed here.
  */
 
 import React from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
+import { Menu, X, ChevronRight, ExternalLink, Copy, Check } from "lucide-react";
+import { DOCS_NAV, type DocSection } from "../lib/docsNav.js";
+import { LogoLockup } from "../components/Logo.js";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Copy button used inside code blocks ─────────────────────────────────────
 
-interface DocSection {
-  id: string;
-  label: string;
-  children?: { id: string; label: string }[];
-}
-
-const NAV: DocSection[] = [
-  { id: "overview",     label: "Overview" },
-  { id: "auth",         label: "Authentication" },
-  {
-    id: "orders",
-    label: "Orders",
-    children: [
-      { id: "orders-create", label: "Create order" },
-      { id: "orders-list",   label: "List orders" },
-      { id: "orders-recon",  label: "Reconciliation status" },
-    ],
-  },
-  {
-    id: "webhooks",
-    label: "Webhooks",
-    children: [
-      { id: "webhooks-inbound",   label: "Inbound event" },
-      { id: "webhooks-signature", label: "Signature verification" },
-      { id: "webhooks-outbound",  label: "Outbound notification" },
-    ],
-  },
-  {
-    id: "exceptions",
-    label: "Exceptions",
-    children: [
-      { id: "exceptions-list",   label: "List exceptions" },
-      { id: "exceptions-refund", label: "Refund excess" },
-    ],
-  },
-  { id: "errors",  label: "Errors" },
-  { id: "amounts", label: "Amounts & Units" },
-];
-
-// ─── Copy button ──────────────────────────────────────────────────────────────
-
-function CopyButton({ text }: { text: string }) {
+function CodeCopyButton({ getText }: { getText: () => string }) {
   const [copied, setCopied] = React.useState(false);
-  function copy() {
-    void navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(getText()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
+
   return (
     <button
       type="button"
-      onClick={copy}
-      className="absolute top-3 right-3 p-1.5 rounded-lg transition-all duration-150 opacity-60 hover:opacity-100"
-      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+      onClick={handleCopy}
+      className="absolute top-2.5 right-2.5 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer"
+      style={{
+        background: copied ? "rgba(22,169,123,0.20)" : "rgba(255,255,255,0.08)",
+        border:     `1px solid ${copied ? "rgba(22,169,123,0.40)" : "rgba(255,255,255,0.12)"}`,
+        color:      copied ? "#16A97B" : "rgba(255,255,255,0.55)",
+      }}
       aria-label="Copy code"
     >
       {copied
-        ? <Check className="w-3.5 h-3.5 text-green-400" />
-        : <Copy className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />}
+        ? <><Check className="w-3 h-3" /> Copied</>
+        : <><Copy className="w-3 h-3" /> Copy</>}
     </button>
   );
 }
 
-// ─── Code block ───────────────────────────────────────────────────────────────
+// ─── Lazy-load markdown files via Vite's ?raw import ─────────────────────────
 
-function Code({ children, lang = "" }: { children: string; lang?: string }) {
+const DOC_MODULES: Record<string, () => Promise<{ default: string }>> = {
+  "01-quickstart.md":    () => import("../docs/01-quickstart.md?raw"),
+  "02-authentication.md": () => import("../docs/02-authentication.md?raw"),
+  "03-orders.md":        () => import("../docs/03-orders.md?raw"),
+  "04-webhooks.md":      () => import("../docs/04-webhooks.md?raw"),
+  "05-exceptions.md":    () => import("../docs/05-exceptions.md?raw"),
+  "06-amounts.md":       () => import("../docs/06-amounts.md?raw"),
+  "07-errors.md":        () => import("../docs/07-errors.md?raw"),
+};
+
+// ─── Sidebar nav item ─────────────────────────────────────────────────────────
+
+function NavItem({
+  section,
+  active,
+  onClick,
+}: {
+  section: DocSection;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="relative rounded-xl overflow-hidden my-4" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
-      {lang && (
-        <div className="px-4 py-2 text-[10px] font-mono uppercase tracking-widest"
-             style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)", color: "var(--text-muted)" }}>
-          {lang}
-        </div>
-      )}
-      <pre className="p-4 text-[12px] font-mono leading-relaxed overflow-x-auto whitespace-pre" style={{ color: "var(--text-brand)" }}>
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer"
+      style={{
+        background: active ? "rgba(22,169,123,0.12)" : "transparent",
+        color: active ? "var(--text-brand)" : "var(--text-secondary)",
+        fontWeight: active ? 600 : 400,
+      }}
+      onMouseEnter={e => {
+        if (!active) e.currentTarget.style.background = "var(--bg-glass-hover)";
+      }}
+      onMouseLeave={e => {
+        if (!active) e.currentTarget.style.background = "transparent";
+      }}
+    >
+      {section.label}
+    </button>
+  );
+}
+
+// ─── Markdown component overrides ────────────────────────────────────────────
+// These map standard MD elements to styled versions that match the design system.
+
+const mdComponents = {
+  h1: ({ children }: { children?: React.ReactNode }) => (
+    <h1 className="text-2xl font-bold font-display mt-0 mb-6 pb-4"
+        style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border)" }}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children }: { children?: React.ReactNode }) => (
+    <h2 className="text-lg font-semibold font-display mt-10 mb-3"
+        style={{ color: "var(--text-primary)" }}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children }: { children?: React.ReactNode }) => (
+    <h3 className="text-base font-semibold mt-6 mb-2"
+        style={{ color: "var(--text-primary)" }}>
+      {children}
+    </h3>
+  ),
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--text-secondary)" }}>
+      {children}
+    </p>
+  ),
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+    <a
+      href={href}
+      className="text-[#16A97B] hover:underline inline-flex items-center gap-0.5"
+      target={href?.startsWith("http") ? "_blank" : undefined}
+      rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
+    >
+      {children}
+      {href?.startsWith("http") && <ExternalLink className="w-3 h-3 opacity-70" />}
+    </a>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="list-disc list-inside space-y-1.5 mb-4 text-sm"
+        style={{ color: "var(--text-secondary)" }}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="list-decimal list-inside space-y-1.5 mb-4 text-sm"
+        style={{ color: "var(--text-secondary)" }}>
+      {children}
+    </ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="leading-relaxed">{children}</li>
+  ),
+  blockquote: ({ children }: { children?: React.ReactNode }) => (
+    <blockquote
+      className="border-l-4 pl-4 py-1 my-4 text-sm italic"
+      style={{ borderColor: "var(--text-brand)", color: "var(--text-muted)", background: "rgba(22,169,123,0.05)" }}
+    >
+      {children}
+    </blockquote>
+  ),
+  hr: () => (
+    <hr className="my-8" style={{ borderColor: "var(--border)" }} />
+  ),
+  // Tables
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div className="overflow-x-auto my-6 rounded-xl" style={{ border: "1px solid var(--border)" }}>
+      <table className="w-full text-sm">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: { children?: React.ReactNode }) => (
+    <thead style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
+      {children}
+    </thead>
+  ),
+  th: ({ children }: { children?: React.ReactNode }) => (
+    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide"
+        style={{ color: "var(--text-muted)" }}>
+      {children}
+    </th>
+  ),
+  tbody: ({ children }: { children?: React.ReactNode }) => (
+    <tbody style={{ background: "var(--bg-surface)" }}>{children}</tbody>
+  ),
+  tr: ({ children }: { children?: React.ReactNode }) => (
+    <tr style={{ borderTop: "1px solid var(--border)" }}>{children}</tr>
+  ),
+  td: ({ children }: { children?: React.ReactNode }) => (
+    <td className="px-4 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+      {children}
+    </td>
+  ),
+  // Inline code
+  code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
+    const isBlock = Boolean(className);
+    if (isBlock) {
+      return <code className={className}>{children}</code>;
+    }
+    return (
+      <code
+        className="font-mono text-xs px-1.5 py-0.5 rounded"
+        style={{ background: "rgba(22,169,123,0.10)", color: "#16A97B" }}
+      >
         {children}
-      </pre>
-      <CopyButton text={children} />
-    </div>
-  );
-}
+      </code>
+    );
+  },
+  // Fenced code blocks
+  pre: ({ children }: { children?: React.ReactNode }) => {
+    // Extract the raw text from the code element inside <pre> so the copy button
+    // can grab it without touching the DOM.
+    const textRef = React.useRef<HTMLPreElement>(null);
+    const getText = () => textRef.current?.innerText ?? textRef.current?.textContent ?? "";
 
-// ─── Method badge ─────────────────────────────────────────────────────────────
-
-function Method({ method }: { method: "GET" | "POST" | "DELETE" }) {
-  const colors = {
-    GET:    "bg-sky-500/15 text-sky-400 border-sky-500/30",
-    POST:   "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    DELETE: "bg-red-500/15 text-red-400 border-red-500/30",
-  };
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-bold border ${colors[method]}`}>
-      {method}
-    </span>
-  );
-}
-
-// ─── Endpoint heading ─────────────────────────────────────────────────────────
-
-function Endpoint({ method, path, desc }: { method: "GET" | "POST" | "DELETE"; path: string; desc: string }) {
-  return (
-    <div className="rounded-xl p-4 mb-6" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center gap-3 mb-2 flex-wrap">
-        <Method method={method} />
-        <code className="text-sm font-mono font-semibold" style={{ color: "var(--text-primary)" }}>{path}</code>
+    return (
+      <div className="relative my-4 rounded-xl overflow-hidden"
+           style={{ background: "#0d1117", border: "1px solid var(--border)" }}>
+        <CodeCopyButton getText={getText} />
+        <pre ref={textRef} className="p-4 pt-10 text-xs font-mono leading-relaxed overflow-x-auto">
+          {children}
+        </pre>
       </div>
-      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{desc}</p>
-    </div>
-  );
-}
+    );
+  },
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold" style={{ color: "var(--text-primary)" }}>{children}</strong>
+  ),
+};
 
-// ─── Field table ──────────────────────────────────────────────────────────────
-
-function FieldTable({ fields }: { fields: { name: string; type: string; required?: boolean; desc: string }[] }) {
-  return (
-    <div className="rounded-xl overflow-hidden my-4" style={{ border: "1px solid var(--border)" }}>
-      <table className="w-full text-xs">
-        <thead>
-          <tr style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
-            {["Field", "Type", "Description"].map((h) => (
-              <th key={h} className="px-4 py-2.5 text-left font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {fields.map((f, i) => (
-            <tr key={f.name} style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none", background: "var(--bg-surface)" }}>
-              <td className="px-4 py-2.5">
-                <code className="font-mono" style={{ color: "var(--text-brand)" }}>{f.name}</code>
-                {f.required && <span className="ml-1.5 text-red-400 text-[10px]">required</span>}
-              </td>
-              <td className="px-4 py-2.5 font-mono" style={{ color: "var(--text-muted)" }}>{f.type}</td>
-              <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{f.desc}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ─── Section anchor wrapper ───────────────────────────────────────────────────
-
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
-  return (
-    <section id={id} className="scroll-mt-24 mb-16">
-      <h2 className="text-2xl font-bold mb-6 pb-3" style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border)" }}>
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function SubSection({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
-  return (
-    <div id={id} className="scroll-mt-24 mb-10">
-      <h3 className="text-lg font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--text-secondary)" }}>{children}</p>;
-}
-
-function Note({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl p-4 my-4 text-sm leading-relaxed"
-         style={{ background: "rgba(22,169,123,0.08)", border: "1px solid rgba(22,169,123,0.25)", color: "var(--text-secondary)" }}>
-      <strong style={{ color: "var(--text-brand)" }}>Note: </strong>{children}
-    </div>
-  );
-}
-
-function Warn({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl p-4 my-4 text-sm leading-relaxed"
-         style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", color: "var(--text-secondary)" }}>
-      <strong className="text-amber-400">Warning: </strong>{children}
-    </div>
-  );
-}
-
-
-// ─── Doc content ──────────────────────────────────────────────────────────────
-
-function DocContent() {
-  return (
-    <div>
-
-      {/* Overview */}
-      <Section id="overview" title="Overview">
-        <P>
-          NairaRails is programmable payment infrastructure for Nigerian marketplace commerce.
-          Every order gets its own unique virtual account number (NUBAN) backed by Nomba.
-          When a buyer pays, a webhook fires and NairaRails automatically matches the payment,
-          classifies it, and executes split settlement to all parties in the same cycle.
-        </P>
-        <P>Base URL for all API calls:</P>
-        <Code lang="bash">{`https://your-nairarails-deployment.railway.app`}</Code>
-        <P>All endpoints are versioned under <code className="font-mono text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>/api/v1/</code>. Amounts are always in <strong>kobo</strong> (₦1 = 100 kobo) to avoid floating point errors.</P>
-      </Section>
-
-      {/* Authentication */}
-      <Section id="auth" title="Authentication">
-        <P>
-          All marketplace-facing routes require an <code className="font-mono text-xs px-1 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>x-api-key</code> header.
-          Your API key is issued once at signup and prefixed <code className="font-mono text-xs px-1 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>nrk_live_</code>.
-        </P>
-        <Code lang="http">{`GET /api/v1/orders\nx-api-key: nrk_live_your_key_here`}</Code>
-        <P>Routes that do not require an API key:</P>
-        <FieldTable fields={[
-          { name: "POST /api/v1/merchants/signup", type: "public", desc: "Issues a new API key — cannot have one yet" },
-          { name: "POST /api/v1/webhooks/nomba",   type: "public", desc: "Authenticated by Nomba HMAC signature, not API key" },
-          { name: "GET /health",                   type: "public", desc: "Health check" },
-        ]} />
-        <Note>Each merchant only sees their own orders, exceptions, and dashboard stats. API keys are scoped to a single merchant account.</Note>
-      </Section>
-
-      {/* Orders */}
-      <Section id="orders" title="Orders">
-
-        <SubSection id="orders-create" title="Create Order">
-          <Endpoint method="POST" path="/api/v1/orders" desc="Create a new order and provision a unique virtual account (NUBAN) for it via Nomba. The buyer pays to the returned account number." />
-          <h4 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Request body</h4>
-          <FieldTable fields={[
-            { name: "order_ref",             type: "string",   required: true,  desc: "Your stable order identifier. Alphanumeric, hyphens, underscores. Max 64 chars. Must be unique." },
-            { name: "customer_name",         type: "string",   required: true,  desc: "Buyer display name. Shown on the virtual account." },
-            { name: "customer_email",        type: "string",   required: false, desc: "Buyer email. Optional." },
-            { name: "expected_amount_kobo",  type: "integer",  required: true,  desc: "Expected payment in kobo. ₦5,000 = 500000. No decimals." },
-            { name: "currency",              type: "\"NGN\"",  required: false, desc: "Defaults to NGN." },
-            { name: "splits",                type: "Split[]",  required: true,  desc: "Array of payout destinations. Percentages must sum to exactly 100." },
-          ]} />
-          <h4 className="text-sm font-semibold mb-2 mt-6" style={{ color: "var(--text-primary)" }}>Split object</h4>
-          <FieldTable fields={[
-            { name: "party",          type: "string",  required: true, desc: "Label for this recipient — e.g. \"seller\", \"platform\", \"rider\"." },
-            { name: "account_number", type: "string",  required: true, desc: "Nigerian NUBAN — exactly 10 digits." },
-            { name: "bank_code",      type: "string",  required: true, desc: "Nomba bank code — use GET /api/v1/admin/banks to look up." },
-            { name: "percentage",     type: "integer", required: true, desc: "Whole number 1–100. All splits must sum to 100." },
-          ]} />
-          <Code lang="json">{`// Request\n{\n  "order_ref": "ord-2041",\n  "customer_name": "Chisom Traders",\n  "expected_amount_kobo": 500000,\n  "currency": "NGN",\n  "splits": [\n    { "party": "seller",   "account_number": "0123456789", "bank_code": "058", "percentage": 85 },\n    { "party": "platform", "account_number": "9876543210", "bank_code": "058", "percentage": 10 },\n    { "party": "rider",    "account_number": "1122334455", "bank_code": "044", "percentage": 5  }\n  ]\n}\n\n// Response 201\n{\n  "order_ref": "ord-2041",\n  "virtual_account_number": "9900012345",\n  "bank_name": "Nomba",\n  "bank_code": "000026",\n  "expected_amount_kobo": 500000,\n  "currency": "NGN",\n  "status": "pending",\n  "created_at": "2026-07-04T01:00:00.000Z"\n}`}</Code>
-        </SubSection>
-
-        <SubSection id="orders-list" title="List Orders">
-          <Endpoint method="GET" path="/api/v1/orders" desc="List all orders for your merchant account, newest first. Supports status and date range filtering." />
-          <h4 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Query parameters</h4>
-          <FieldTable fields={[
-            { name: "status",    type: "string", desc: "Filter by status: pending | paid | underpayment | overpayment | unmatched | expired" },
-            { name: "date_from", type: "string", desc: "ISO date YYYY-MM-DD. Filter orders created on or after this date (UTC)." },
-            { name: "date_to",   type: "string", desc: "ISO date YYYY-MM-DD. Filter orders created on or before this date (UTC)." },
-            { name: "page",      type: "integer", desc: "Page number, default 1." },
-            { name: "page_size", type: "integer", desc: "Results per page, default 20, max 100." },
-          ]} />
-          <Code lang="json">{`// Response 200\n{\n  "results": [\n    {\n      "order_ref": "ord-2041",\n      "customer_name": "Chisom Traders",\n      "expected_amount_kobo": 500000,\n      "received_amount_kobo": 500000,\n      "status": "paid",\n      "virtual_account_number": "9900012345",\n      "created_at": "2026-07-04T01:00:00.000Z"\n    }\n  ],\n  "page": 1,\n  "page_size": 20,\n  "total_count": 1\n}`}</Code>
-        </SubSection>
-
-        <SubSection id="orders-recon" title="Reconciliation Status">
-          <Endpoint method="GET" path="/api/v1/orders/:order_ref/reconciliation" desc="Full reconciliation detail for a single order: payment classification, split execution state for each party, and the complete audit trail." />
-          <Code lang="json">{`// Response 200\n{\n  "order_ref": "ord-2041",\n  "virtual_account_number": "9900012345",\n  "expected_amount_kobo": 500000,\n  "received_amount_kobo": 480000,\n  "status": "underpayment",\n  "shortfall_kobo": 20000,\n  "excess_kobo": 0,\n  "splits_executed": false,\n  "splits": [\n    { "party": "seller",   "percentage": 85, "amount_paid_kobo": null, "status": "pending", "nomba_transfer_ref": null },\n    { "party": "platform", "percentage": 10, "amount_paid_kobo": null, "status": "pending", "nomba_transfer_ref": null },\n    { "party": "rider",    "percentage": 5,  "amount_paid_kobo": null, "status": "pending", "nomba_transfer_ref": null }\n  ],\n  "audit_trail": [\n    { "event": "va_created",       "timestamp": "2026-07-04T01:00:00.000Z" },\n    { "event": "payment_received", "amount_kobo": 480000, "timestamp": "2026-07-04T01:05:12.000Z" },\n    { "event": "classified",       "detail": "underpayment: shortfall 20000 kobo", "timestamp": "2026-07-04T01:05:12.000Z" }\n  ]\n}`}</Code>
-        </SubSection>
-      </Section>
-
-      {/* Webhooks */}
-      <Section id="webhooks" title="Webhooks">
-
-        <SubSection id="webhooks-inbound" title="Inbound Event (Nomba → NairaRails)">
-          <Endpoint method="POST" path="/api/v1/webhooks/nomba" desc="Receives virtual account funding events from Nomba. Verifies HMAC signature, checks idempotency, classifies the payment, and executes splits. Always returns 200 once the event is safely recorded." />
-          <P>You do not call this endpoint — Nomba does. Register your NairaRails deployment URL in the Nomba dashboard as your webhook URL.</P>
-          <Code lang="json">{`// Nomba sends (event_type: payment_success, type: vact_transfer)\n{\n  "requestId": "req-uuid-abc-123",\n  "event_type": "payment_success",\n  "data": {\n    "transaction": {\n      "transactionId": "txn_abc123",\n      "type": "vact_transfer",\n      "transactionAmount": 5000,\n      "time": "2026-07-04T01:05:12Z",\n      "responseCode": "00",\n      "aliasAccountReference": "ord-2041"\n    },\n    "merchant": {\n      "userId": "user_001",\n      "walletId": "wallet_001"\n    },\n    "customer": {\n      "senderName": "Emeka Okafor",\n      "accountNumber": "0123456789",\n      "bankCode": "058"\n    }\n  }\n}`}</Code>
-          <Warn>transactionAmount is in NAIRA (not kobo) in Nomba's webhook payload. NairaRails converts to kobo internally by multiplying by 100.</Warn>
-          <Note>aliasAccountReference maps to your order_ref. This is set as accountRef when the virtual account is created, so no secondary lookup is needed.</Note>
-        </SubSection>
-
-        <SubSection id="webhooks-signature" title="Signature Verification">
-          <P>Every inbound webhook is verified before any business logic runs. Nomba signs events using HMAC-SHA256 over a colon-joined field string.</P>
-          <Code lang="text">{`Fields (joined with \":\" in this exact order):\n  event_type\n  requestId\n  data.merchant.userId\n  data.merchant.walletId\n  data.transaction.transactionId\n  data.transaction.type\n  data.transaction.time\n  data.transaction.responseCode  (empty string if absent)\n  nomba-timestamp header`}</Code>
-          <Code lang="typescript">{`const payload = [\n  event_type, requestId,\n  merchant.userId, merchant.walletId,\n  transaction.transactionId, transaction.type,\n  transaction.time, transaction.responseCode ?? \"\",\n  headers[\"nomba-timestamp\"],\n].join(\":\");\n\nconst expected = crypto\n  .createHmac(\"sha256\", process.env.NOMBA_WEBHOOK_SECRET)\n  .update(payload)\n  .digest(\"base64\");\n\n// Timing-safe — never use === for crypto comparison\ncrypto.timingSafeEqual(\n  Buffer.from(expected),\n  Buffer.from(headers[\"nomba-signature\"])\n);`}</Code>
-        </SubSection>
-
-        <SubSection id="webhooks-outbound" title="Outbound Notification (NairaRails → Your Server)">
-          <P>After each payment is classified, NairaRails POSTs a <code className="font-mono text-xs px-1 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>payment.classified</code> event to your registered <code className="font-mono text-xs px-1 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>webhookUrl</code>. Fire-and-forget — a failed delivery never blocks the inbound handler.</P>
-          <Code lang="json">{`// POST to your webhookUrl\n{\n  "event": "payment.classified",\n  "order_ref": "ord-2041",\n  "status": "paid",\n  "received_amount_kobo": 500000,\n  "expected_amount_kobo": 500000,\n  "splits_executed": true,\n  "timestamp": "2026-07-04T01:05:12.000Z"\n}`}</Code>
-          <P>Register your webhook URL at signup or update it later. Your server should return 2xx — NairaRails logs non-2xx but does not retry.</P>
-        </SubSection>
-      </Section>
-
-      {/* Exceptions */}
-      <Section id="exceptions" title="Exceptions">
-        <P>Exceptions are orders in <code className="font-mono text-xs px-1 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>underpayment</code>, <code className="font-mono text-xs px-1 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>overpayment</code>, or <code className="font-mono text-xs px-1 rounded" style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>unmatched</code> status that require ops attention.</P>
-
-        <SubSection id="exceptions-list" title="List Exceptions">
-          <Endpoint method="GET" path="/api/v1/exceptions" desc="List all open exceptions for your merchant account." />
-          <FieldTable fields={[
-            { name: "type", type: "string", desc: "Filter by type: underpayment | overpayment | unmatched" },
-          ]} />
-          <Code lang="json">{`// Response 200\n{\n  "results": [\n    {\n      "order_ref": "ord-2041",\n      "type": "overpayment",\n      "expected_amount_kobo": 500000,\n      "received_amount_kobo": 520000,\n      "shortfall_kobo": 0,\n      "excess_kobo": 20000,\n      "raised_at": "2026-07-04T01:05:12.000Z",\n      "resolved": false,\n      "resolved_at": null\n    }\n  ],\n  "total_count": 1\n}`}</Code>
-        </SubSection>
-
-        <SubSection id="exceptions-refund" title="Refund Excess">
-          <Endpoint method="POST" path="/api/v1/exceptions/:order_ref/refund-excess" desc="Refund the excess amount from an overpayment back to the original sender. Looks up the sender's account (from webhook data), transfers the excess kobo, and marks the exception resolved." />
-          <Warn>The sender account details must have been captured from the inbound webhook. If the webhook did not include customer.accountNumber, the refund will fail.</Warn>
-          <Code lang="json">{`// Response 200\n{\n  "order_ref": "ord-2041",\n  "refunded_amount_kobo": 20000,\n  "sender_account": "0123456789",\n  "sender_bank": "058",\n  "status": "success",\n  "nomba_transfer_ref": "txn_refund_xyz"\n}`}</Code>
-        </SubSection>
-      </Section>
-
-      {/* Errors */}
-      <Section id="errors" title="Errors">
-        <P>All errors follow a consistent shape:</P>
-        <Code lang="json">{`{\n  "error": {\n    "code":    "DUPLICATE_ORDER_REF",\n    "message": "Order ref 'ord-2041' already exists",\n    "field":   "order_ref"   // present on validation errors\n  }\n}`}</Code>
-        <FieldTable fields={[
-          { name: "400 VALIDATION_ERROR",    type: "4xx", desc: "Request body failed schema validation. field identifies the offending key." },
-          { name: "401 MISSING_API_KEY",     type: "4xx", desc: "No x-api-key header on a protected route." },
-          { name: "401 INVALID_API_KEY",     type: "4xx", desc: "The provided API key is not valid." },
-          { name: "401 INVALID_WEBHOOK_SIGNATURE", type: "4xx", desc: "Nomba webhook HMAC verification failed." },
-          { name: "404 ORDER_NOT_FOUND",     type: "4xx", desc: "Order ref does not exist or belongs to another merchant." },
-          { name: "409 DUPLICATE_ORDER_REF", type: "4xx", desc: "order_ref already exists — use a different ref." },
-          { name: "422 VALIDATION_ERROR",    type: "4xx", desc: "splits percentages do not sum to 100, or other semantic validation failure." },
-          { name: "500 INTERNAL_ERROR",      type: "5xx", desc: "Unexpected server error." },
-        ]} />
-      </Section>
-
-      {/* Amounts */}
-      <Section id="amounts" title="Amounts & Units">
-        <P>All monetary amounts in the NairaRails API are in <strong>kobo</strong> — the smallest unit of the Nigerian naira.</P>
-        <Code lang="text">{`₦1.00  =  100 kobo\n₦50.00 =  5,000 kobo\n₦5,000 =  500,000 kobo\n\n// Always integers — no decimals accepted\nexpected_amount_kobo: 500000   ✓\nexpected_amount_kobo: 5000.00  ✗  (rejected)`}</Code>
-        <Note>Nomba's webhook delivers transactionAmount in naira (not kobo). NairaRails converts by multiplying by 100 before any comparison or storage. Your API always receives and returns kobo.</Note>
-      </Section>
-
-    </div>
-  );
-}
-
-
-// ─── Sidebar ──────────────────────────────────────────────────────────────────
-
-function Sidebar({ active, onSelect }: { active: string; onSelect: (id: string) => void }) {
-  const [open, setOpen] = React.useState<Record<string, boolean>>({ orders: true, webhooks: true, exceptions: true });
-
-  function toggle(id: string) { setOpen((o) => ({ ...o, [id]: !o[id] })); }
-
-  return (
-    <nav className="w-60 shrink-0" aria-label="Docs navigation">
-      <div className="sticky top-20 space-y-0.5">
-        {NAV.map((section) => (
-          <div key={section.id}>
-            <button
-              type="button"
-              onClick={() => { onSelect(section.id); if (section.children) toggle(section.id); }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 text-left cursor-pointer"
-              style={{
-                background: active === section.id ? "rgba(22,169,123,0.10)" : "transparent",
-                color:      active === section.id ? "var(--brand)" : "var(--text-secondary)",
-              }}
-            >
-              <span>{section.label}</span>
-              {section.children && (
-                open[section.id]
-                  ? <ChevronDown className="w-3.5 h-3.5 shrink-0" />
-                  : <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-              )}
-            </button>
-            {section.children && open[section.id] && (
-              <div className="ml-3 mt-0.5 space-y-0.5 pl-3" style={{ borderLeft: "1px solid var(--border)" }}>
-                {section.children.map((child) => (
-                  <button
-                    key={child.id}
-                    type="button"
-                    onClick={() => onSelect(child.id)}
-                    className="w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors duration-150 cursor-pointer"
-                    style={{
-                      color: active === child.id ? "var(--brand)" : "var(--text-muted)",
-                      background: active === child.id ? "rgba(22,169,123,0.08)" : "transparent",
-                    }}
-                  >
-                    {child.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function DocsPage() {
-  const navigate = useNavigate();
-  const [activeSection, setActiveSection] = React.useState("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeId = searchParams.get("section") ?? DOCS_NAV[0]?.id ?? "quickstart";
 
-  function scrollTo(id: string) {
-    setActiveSection(id);
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const [content, setContent] = React.useState<string>("");
+  const [loading, setLoading] = React.useState(true);
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+
+  // Load the markdown file whenever activeId changes
+  React.useEffect(() => {
+    const section = DOCS_NAV.find(s => s.id === activeId);
+    if (!section) return;
+
+    const loader = DOC_MODULES[section.file];
+    if (!loader) return;
+
+    setLoading(true);
+    loader()
+      .then(mod => {
+        setContent(mod.default);
+        setLoading(false);
+        window.scrollTo({ top: 0, behavior: "instant" });
+      })
+      .catch(() => {
+        setContent("# Error\n\nThis page could not be loaded.");
+        setLoading(false);
+      });
+  }, [activeId]);
+
+  function navigate(id: string) {
+    setSearchParams({ section: id });
+    setSidebarOpen(false);
   }
 
-  // Update active section on scroll
-  React.useEffect(() => {
-    const allIds = NAV.flatMap((s) => [s.id, ...(s.children?.map((c) => c.id) ?? [])]);
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.target.id) {
-            setActiveSection(entry.target.id);
-          }
-        }
-      },
-      { rootMargin: "-20% 0px -70% 0px" }
-    );
-    allIds.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
-  }, []);
+  const activeIndex = DOCS_NAV.findIndex(s => s.id === activeId);
+  const prevSection = activeIndex > 0 ? DOCS_NAV[activeIndex - 1] : null;
+  const nextSection = activeIndex < DOCS_NAV.length - 1 ? DOCS_NAV[activeIndex + 1] : null;
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg-base)" }}>
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full backdrop-blur-md"
-              style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-glass)" }}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 md:px-8 py-4">
-          <div className="flex items-center gap-4">
-            <button type="button" onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 text-sm transition-colors duration-150"
-              style={{ color: "var(--text-muted)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}>
-              <ArrowLeft className="w-4 h-4" /> Back
-            </button>
-            <div style={{ width: "1px", height: "16px", background: "var(--border)" }} />
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-[#16A97B] flex items-center justify-center">
-                <span className="text-black text-xs font-bold">₦</span>
-              </div>
-              <span className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>NairaRails</span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-mono"
-                    style={{ background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-                API Reference
-              </span>
-            </div>
-          </div>
-          <button type="button" onClick={() => navigate("/signup")}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#16A97B] hover:bg-[#128a64] text-black font-semibold rounded-lg text-sm transition-colors duration-150">
-            Get API Access
+      {/* ── Top bar ─────────────────────────────────────────────────────── */}
+      <header
+        className="sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 h-14 backdrop-blur-sm"
+        style={{ borderBottom: "1px solid var(--border)", background: "rgba(10,14,20,0.85)" }}
+      >
+        <div className="flex items-center gap-3">
+          {/* Mobile sidebar toggle */}
+          <button
+            type="button"
+            className="lg:hidden p-1.5 rounded-lg cursor-pointer"
+            style={{ color: "var(--text-muted)" }}
+            onClick={() => setSidebarOpen(v => !v)}
+            aria-label="Toggle sidebar"
+          >
+            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
+
+          <Link to="/" className="flex items-center gap-2 group">
+            <LogoLockup size={24} textSize="text-sm" />
+          </Link>
+
+          <span className="hidden sm:block text-xs px-2 py-0.5 rounded"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+            Docs
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
+          <Link to="/dashboard/overview"
+                className="hover:text-[#16A97B] transition-colors cursor-pointer">
+            Dashboard
+          </Link>
+          <Link to="/signup"
+                className="px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer"
+                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "var(--text-brand)"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+          >
+            Get API key
+          </Link>
         </div>
       </header>
 
-      {/* Body */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 flex gap-10">
+      <div className="flex">
 
-        {/* Sidebar — hidden on mobile */}
-        <div className="hidden lg:block">
-          <Sidebar active={activeSection} onSelect={scrollTo} />
-        </div>
+        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+        {/* Mobile overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-        {/* Content */}
-        <main className="flex-1 min-w-0 max-w-3xl">
-          <div className="mb-10">
-            <h1 className="text-4xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>API Reference</h1>
-            <p className="text-base" style={{ color: "var(--text-secondary)" }}>
-              Complete reference for the NairaRails REST API. All amounts are in kobo.
-            </p>
-          </div>
-          <DocContent />
+        <aside
+          className={`
+            fixed top-14 left-0 z-30 h-[calc(100vh-56px)] w-56 overflow-y-auto
+            transition-transform duration-200 lg:sticky lg:translate-x-0
+            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          `}
+          style={{ background: "var(--bg-surface)", borderRight: "1px solid var(--border)" }}
+        >
+          <nav className="p-3 space-y-0.5">
+            {DOCS_NAV.map(section => (
+              <NavItem
+                key={section.id}
+                section={section}
+                active={section.id === activeId}
+                onClick={() => navigate(section.id)}
+              />
+            ))}
+          </nav>
+        </aside>
+
+        {/* ── Main content ─────────────────────────────────────────────────── */}
+        <main className="flex-1 min-w-0 px-6 sm:px-10 py-10 max-w-3xl">
+
+          {loading ? (
+            <div className="space-y-4 animate-pulse">
+              <div className="h-7 rounded w-1/3" style={{ background: "var(--bg-elevated)" }} />
+              <div className="h-4 rounded w-full" style={{ background: "var(--bg-elevated)" }} />
+              <div className="h-4 rounded w-5/6" style={{ background: "var(--bg-elevated)" }} />
+              <div className="h-4 rounded w-4/6" style={{ background: "var(--bg-elevated)" }} />
+            </div>
+          ) : (
+            <article className="docs-content">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
+                components={mdComponents as never}
+              >
+                {content}
+              </ReactMarkdown>
+            </article>
+          )}
+
+          {/* ── Prev / Next navigation ───────────────────────────────────── */}
+          {!loading && (
+            <div className="mt-12 pt-6 flex items-center justify-between"
+                 style={{ borderTop: "1px solid var(--border)" }}>
+              {prevSection ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(prevSection.id)}
+                  className="flex items-center gap-2 text-sm cursor-pointer transition-colors"
+                  style={{ color: "var(--text-muted)" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "var(--text-brand)"}
+                  onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                >
+                  ← {prevSection.label}
+                </button>
+              ) : <div />}
+
+              {nextSection ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(nextSection.id)}
+                  className="flex items-center gap-2 text-sm cursor-pointer transition-colors"
+                  style={{ color: "var(--text-muted)" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "var(--text-brand)"}
+                  onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                >
+                  {nextSection.label} <ChevronRight className="w-4 h-4" />
+                </button>
+              ) : <div />}
+            </div>
+          )}
         </main>
       </div>
     </div>

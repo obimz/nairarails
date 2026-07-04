@@ -173,4 +173,106 @@ router.post("/exceptions/:order_ref/refund-excess", apiKeyAuth, async (req, res,
   }
 });
 
+// ─── POST /api/v1/exceptions/:order_ref/refund-shortfall ─────────────────────
+// Validates the order is an underpayment belonging to the calling merchant,
+// then transfers the full received amount back to the original payer via Nomba.
+// The order is marked `refunded` and closed — no splits were ever executed.
+router.post("/exceptions/:order_ref/refund-shortfall", apiKeyAuth, async (req, res, next) => {
+  try {
+    const merchant = res.locals.merchant;
+    const { order_ref } = req.params as { order_ref: string };
+
+    const order = await prisma.order.findUnique({ where: { orderRef: order_ref } });
+
+    // Treat wrong-merchant orders as 404 — don't leak other merchants' data.
+    if (!order || order.merchantId !== merchant.id) {
+      throw new AppError(404, "ORDER_NOT_FOUND", `Order '${order_ref}' not found`);
+    }
+
+    if (order.status !== "underpayment") {
+      throw new AppError(
+        422,
+        "VALIDATION_ERROR",
+        `Order '${order_ref}' is not an underpayment — current status: ${order.status}`
+      );
+    }
+
+    if (!order.senderAccountNumber || !order.senderBankCode) {
+      throw new AppError(
+        422,
+        "VALIDATION_ERROR",
+        `Order '${order_ref}' has no sender account on record — cannot initiate refund`
+      );
+    }
+
+    const refundKobo = Number(order.receivedAmountKobo ?? 0);
+
+    if (refundKobo <= 0) {
+      throw new AppError(422, "VALIDATION_ERROR", `No received amount to refund for order '${order_ref}'`);
+    }
+
+    logger.info(
+      {
+        order_ref,
+        refundKobo,
+        merchantId:    merchant.id,
+        senderAccount: order.senderAccountNumber,
+        senderBank:    order.senderBankCode,
+      },
+      "Initiating refund-shortfall via Nomba transfer"
+    );
+
+    // Step 1: Verify recipient before sending — never skip lookup.
+    const { accountName } = await lookupBankAccount({
+      bankCode:      order.senderBankCode,
+      accountNumber: order.senderAccountNumber,
+    });
+
+    // Step 2: Transfer the full received amount back to the original payer.
+    const merchantTxRef = `refund_shortfall_${order_ref}`;
+    const { transferRef, status: txStatus } = await transferToBank({
+      amountKobo:    refundKobo,
+      bankCode:      order.senderBankCode,
+      accountNumber: order.senderAccountNumber,
+      accountName,
+      narration:     `NairaRails refund — underpayment for order ${order_ref}`,
+      merchantTxRef,
+    });
+
+    // Step 3: Mark order as refunded and log the movement.
+    await prisma.$transaction([
+      prisma.order.update({
+        where: { orderRef: order_ref },
+        data:  { status: "refunded" },
+      }),
+      prisma.ledgerEntry.create({
+        data: {
+          orderRef:   order_ref,
+          entryType:  "refund_issued",
+          amountKobo: BigInt(-refundKobo), // debit — money leaving
+          reference:  transferRef,
+          narration:  `Underpayment refund to ${order.senderName ?? order.senderAccountNumber}: ${refundKobo} kobo`,
+        },
+      }),
+    ]);
+
+    logger.info(
+      { order_ref, refundKobo, transferRef, txStatus },
+      "Refund-shortfall completed"
+    );
+
+    res.status(200).json({
+      order_ref,
+      refunded_amount_kobo: refundKobo,
+      sender_account:       order.senderAccountNumber,
+      sender_bank:          order.senderBankCode,
+      status:               "resolved",
+      nomba_transfer_ref:   transferRef,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export { router as exceptionRouter };
+
