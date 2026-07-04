@@ -8,6 +8,7 @@ const STATUS_MAP: Record<string, string> = {
   underpayment: "badge-underpayment",
   overpayment:  "badge-overpayment",
   unmatched:    "badge-unmatched",
+  expired:      "badge-expired",
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {

@@ -32,7 +32,7 @@ const COLOR_MAP = {
 
 function StatCard({ label, value, sub, color = "default", loading, icon }: StatCardProps) {
   return (
-    <div className="stat-card">
+    <div className="stat-card-accent transition-shadow duration-200 hover:shadow-[0_0_0_1px_rgba(22,169,123,0.3)]">
       <div className="flex items-start justify-between mb-3">
         <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</p>
         {icon && <div className="text-slate-600">{icon}</div>}
@@ -103,7 +103,7 @@ export function OverviewPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-50">Overview</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            {data ? `Today · ${data.date}` : "Loading…"}
+            {data ? `All orders · as of ${data.date}` : "Loading…"}
           </p>
         </div>
         <button
@@ -129,14 +129,14 @@ export function OverviewPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         <StatCard
-          label="Expected Today"
+          label="Total Expected"
           value={data ? formatNairaCompact(data.total_expected_today_kobo) : "—"}
           sub={data ? formatNaira(data.total_expected_today_kobo) : undefined}
           icon={<TrendingUp className="w-4 h-4" />}
           loading={isLoading}
         />
         <StatCard
-          label="Received Today"
+          label="Total Received"
           value={data ? formatNairaCompact(data.total_received_today_kobo) : "—"}
           sub={data ? `${collectionRate}% collected` : undefined}
           color={rateColor}
@@ -197,7 +197,7 @@ export function OverviewPage() {
 
       {/* Orders by status chart */}
       <div className="card-dark p-6">
-        <h3 className="text-sm font-semibold text-slate-300 mb-5">Orders by Status — Today</h3>
+        <h3 className="text-sm font-semibold text-slate-300 mb-5">Orders by Status</h3>
 
         {isLoading && (
           <div className="h-52 flex items-center justify-center">

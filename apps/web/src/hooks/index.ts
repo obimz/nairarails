@@ -108,11 +108,15 @@ export const QUERY_KEYS = {
 } as const;
 
 // ─── useOrders ───────────────────────────────────────────────────────────────
-export function useOrders(status?: string) {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+export function useOrders(filters?: { status?: string; date_from?: string; date_to?: string }) {
+  const qs = new URLSearchParams();
+  if (filters?.status)    qs.set("status",    filters.status);
+  if (filters?.date_from) qs.set("date_from", filters.date_from);
+  if (filters?.date_to)   qs.set("date_to",   filters.date_to);
+  const query = qs.toString();
   return useQuery<OrderListResponse>({
-    queryKey: QUERY_KEYS.orders(status),
-    queryFn:  () => apiGet<OrderListResponse>(`/api/v1/orders${qs}`),
+    queryKey: ["orders", filters],
+    queryFn:  () => apiGet<OrderListResponse>(`/api/v1/orders${query ? `?${query}` : ""}`),
   });
 }
 

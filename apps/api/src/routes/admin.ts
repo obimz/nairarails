@@ -4,11 +4,28 @@
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
-import { listTransactions, NombaApiError } from "../integrations/nombaClient.js";
+import { listTransactions, NombaApiError, lookupBankAccount, fetchBankCodes, expireVirtualAccount } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
 import { AppError } from "../middleware/errorHandler.js";
 
 const router: ExpressRouter = Router();
+
+// ─── Admin auth ───────────────────────────────────────────────────────────────
+// All admin routes require the x-admin-secret header to match ADMIN_SECRET env var.
+// Not a substitute for real auth — this is a simple guard against accidental exposure.
+router.use((req, res, next) => {
+  const secret = process.env["ADMIN_SECRET"];
+  if (!secret) {
+    // If not configured, block all admin access rather than leave it open.
+    res.status(503).json({ error: "Admin secret not configured on this server" });
+    return;
+  }
+  if (req.headers["x-admin-secret"] !== secret) {
+    res.status(401).json({ error: "Invalid or missing x-admin-secret header" });
+    return;
+  }
+  next();
+});
 
 // ─── Query schema ─────────────────────────────────────────────────────────────
 const ReconcileQuerySchema = z.object({
@@ -159,13 +176,47 @@ router.get("/admin/reconcile-check", async (req, res, next) => {
   }
 });
 
+// ─── GET /api/v1/admin/banks ──────────────────────────────────────────────────
+// Proxies Nomba's bank code list. Call this to find the correct bankCode
+// for any Nigerian bank before creating an order with split recipients.
+router.get("/admin/banks", async (req, res, next) => {
+  try {
+    const banks = await fetchBankCodes();
+    return res.status(200).json({ count: banks.length, banks });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ─── POST /api/v1/admin/test-lookup ──────────────────────────────────────────
+// Calls Nomba's bank account lookup directly so you can verify a bankCode +
+// accountNumber combination resolves before using it in a real order split.
+// Use this to debug "Resource not found" errors without triggering a payment.
+router.post("/admin/test-lookup", async (req, res, next) => {
+  try {
+    const { bankCode, accountNumber } = req.body as { bankCode: string; accountNumber: string };
+    if (!bankCode || !accountNumber) {
+      return res.status(400).json({ error: "bankCode and accountNumber are required" });
+    }
+
+    const result = await lookupBankAccount({ bankCode, accountNumber });
+    return res.status(200).json({ bankCode, accountNumber, accountName: result.accountName });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // ─── POST /api/v1/admin/nuke ──────────────────────────────────────────────────
 // DANGER: Deletes ALL orders, splits, ledger entries, and webhook events.
-// Use only during development to reset to a clean state. Does NOT touch merchants.
-// Does NOT touch Nomba — virtual accounts remain on their side, but you control
-// the accountRef so there's no collision (just use fresh order_refs after nuke).
+// Also expires all virtual accounts on Nomba's side so they stop accepting payments.
+// Does NOT touch merchants.
 router.post("/admin/nuke", async (req, res, next) => {
   try {
+    // Collect all order refs + VA numbers before wiping the DB.
+    const orders = await prisma.order.findMany({
+      select: { orderRef: true, virtualAccountNumber: true },
+    });
+
     await prisma.$transaction([
       prisma.ledgerEntry.deleteMany(),
       prisma.split.deleteMany(),
@@ -175,9 +226,22 @@ router.post("/admin/nuke", async (req, res, next) => {
 
     logger.warn("Admin nuke: ALL orders and related data deleted");
 
+    // Best-effort expire each VA on Nomba's side — don't fail the nuke if Nomba errors.
+    const expireResults = await Promise.allSettled(
+      orders
+        .filter((o) => o.virtualAccountNumber) // only if VA was actually created
+        .map((o) => expireVirtualAccount(o.orderRef))
+    );
+
+    const expired  = expireResults.filter((r) => r.status === "fulfilled").length;
+    const failed   = expireResults.filter((r) => r.status === "rejected").length;
+
     return res.status(200).json({
-      status: "nuked",
-      message: "All orders, splits, ledger entries, and webhook events deleted.",
+      status:            "nuked",
+      orders_deleted:    orders.length,
+      nomba_vas_expired: expired,
+      nomba_expire_failed: failed,
+      message: "All local orders deleted. Virtual accounts expired on Nomba where possible.",
     });
   } catch (err) {
     return next(err);
@@ -203,6 +267,12 @@ router.post("/admin/orders/expire-pending", async (req, res, next) => {
         ? { status: "pending" as const, orderRef: { in: orderRefs } }
         : { status: "pending" as const };
 
+    // Collect VA refs before updating.
+    const ordersToExpire = await prisma.order.findMany({
+      where,
+      select: { orderRef: true, virtualAccountNumber: true },
+    });
+
     const { count } = await prisma.order.updateMany({
       where,
       data: { status: "expired" },
@@ -213,9 +283,21 @@ router.post("/admin/orders/expire-pending", async (req, res, next) => {
       "Admin bulk expire: pending orders marked expired"
     );
 
+    // Best-effort expire each VA on Nomba's side.
+    const expireResults = await Promise.allSettled(
+      ordersToExpire
+        .filter((o) => o.virtualAccountNumber)
+        .map((o) => expireVirtualAccount(o.orderRef))
+    );
+
+    const nombaExpired = expireResults.filter((r) => r.status === "fulfilled").length;
+    const nombaFailed  = expireResults.filter((r) => r.status === "rejected").length;
+
     return res.status(200).json({
-      expired_count: count,
-      message: `${count} order(s) marked as expired.`,
+      expired_count:       count,
+      nomba_vas_expired:   nombaExpired,
+      nomba_expire_failed: nombaFailed,
+      message: `${count} order(s) marked as expired. ${nombaExpired} VA(s) expired on Nomba.`,
     });
   } catch (err) {
     return next(err);
@@ -287,10 +369,20 @@ router.post("/admin/orders/:orderRef/reset", async (req, res, next) => {
 
     logger.warn({ orderRef }, "Admin order reset complete — order back to pending");
 
+    // Best-effort expire the VA on Nomba's side — the order gets a fresh VA on next payment attempt.
+    if (order.virtualAccountNumber) {
+      try {
+        await expireVirtualAccount(orderRef);
+        logger.info({ orderRef }, "Nomba virtual account expired as part of order reset");
+      } catch (expireErr) {
+        logger.warn({ orderRef, err: expireErr }, "Could not expire Nomba VA during reset — continuing");
+      }
+    }
+
     return res.status(200).json({
       orderRef,
       status:  "reset_to_pending",
-      message: "Order reset. Re-send the payment to re-trigger classification.",
+      message: "Order reset. Virtual account expired on Nomba. Re-create the order to get a fresh VA.",
     });
   } catch (err) {
     return next(err);
