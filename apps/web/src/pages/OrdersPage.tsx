@@ -266,10 +266,11 @@ export function OrdersPage() {
   const [dateFrom,     setDateFrom]     = React.useState("");
   const [dateTo,       setDateTo]       = React.useState("");
 
+  const statusArg = statusFilter === "all" ? undefined : statusFilter;
   const { data, isLoading, isError, error, refetch } = useOrders({
-    status:    statusFilter === "all" ? undefined : statusFilter,
-    date_from: dateFrom || undefined,
-    date_to:   dateTo   || undefined,
+    ...(statusArg  !== undefined ? { status:    statusArg }      : {}),
+    ...(dateFrom   ? { date_from: dateFrom } : {}),
+    ...(dateTo     ? { date_to:   dateTo   } : {}),
   });
 
   const orders = data?.results ?? [];
@@ -283,7 +284,7 @@ export function OrdersPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-50">Orders</h2>
+          <h2 className="text-lg font-bold text-slate-50">Orders</h2>
           <p className="text-sm text-slate-500 mt-0.5">
             {data ? `${data.total_count} order${data.total_count !== 1 ? "s" : ""}` : "Loading…"}
           </p>

@@ -9,7 +9,7 @@ import {
   Route,
   Routes,
 } from "react-router-dom";
-import { LayoutDashboard, Receipt, AlertTriangle, LogOut } from "lucide-react";
+import { LayoutDashboard, Receipt, AlertTriangle, Settings, LogOut } from "lucide-react";
 import { queryClient }    from "./lib/queryClient.js";
 import { LandingPage }    from "./pages/LandingPage.js";
 import { OnboardingPage } from "./pages/OnboardingPage.js";
@@ -20,8 +20,12 @@ import { ExceptionsPage } from "./pages/ExceptionsPage.js";
 import { ProtectedRoute } from "./components/ProtectedRoute.js";
 import { ThemeProvider }  from "./contexts/ThemeContext.js";
 import { ThemeToggle }    from "./components/ThemeToggle.js";
-import { AdminPage }      from "./pages/AdminPage.js";
-import { DocsPage }       from "./pages/DocsPage.js";
+import { AdminPage }          from "./pages/AdminPage.js";
+import { DocsPage }           from "./pages/DocsPage.js";
+import { AuthCallbackPage }   from "./pages/AuthCallbackPage.js";
+import { SettingsPage }       from "./pages/SettingsPage.js";
+import { LogoLockup }     from "./components/Logo.js";
+import { supabase }       from "./lib/supabase.js";
 import "./index.css";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -30,6 +34,7 @@ const NAV_LINKS = [
   { label: "Overview",   to: "/dashboard/overview",    icon: LayoutDashboard },
   { label: "Orders",     to: "/dashboard/orders",      icon: Receipt },
   { label: "Exceptions", to: "/dashboard/exceptions",  icon: AlertTriangle },
+  { label: "Settings",   to: "/dashboard/settings",    icon: Settings },
 ] as const;
 
 // ─── Sidebar layout ───────────────────────────────────────────────────────────
@@ -47,10 +52,7 @@ function DashboardLayout() {
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-5 py-5"
              style={{ borderBottom: "1px solid var(--border)" }}>
-          <div className="w-7 h-7 rounded-lg bg-[#16A97B] flex items-center justify-center shrink-0">
-            <span className="text-black text-xs font-bold">₦</span>
-          </div>
-          <span className="font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>NairaRails</span>
+          <LogoLockup size={28} textSize="text-sm" />
         </div>
 
         {/* Nav links */}
@@ -77,9 +79,10 @@ function DashboardLayout() {
           </div>
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               localStorage.removeItem("nairarails_api_key");
-              window.location.href = "/signup";
+              await supabase.auth.signOut();
+              window.location.href = "/login";
             }}
             className="nav-link w-full text-left hover:text-red-500"
           >
@@ -129,6 +132,7 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/signup" element={<OnboardingPage />} />
       <Route path="/login"  element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/admin"  element={<AdminPage />} />
       <Route path="/docs"   element={<DocsPage />} />
 
@@ -145,6 +149,7 @@ function AppRoutes() {
         <Route path="overview"   element={<OverviewPage />} />
         <Route path="orders"     element={<OrdersPage />} />
         <Route path="exceptions" element={<ExceptionsPage />} />
+        <Route path="settings"   element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

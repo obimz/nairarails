@@ -13,6 +13,7 @@ import {
   Zap, Lock, AlertTriangle, Webhook, SplitSquareVertical, GitMerge,
 } from "lucide-react";
 import { PaymentFlowDiagram } from "../components/PaymentFlowDiagram.js";
+import { LogoMark, LogoLockup } from "../components/Logo.js";
 import { ThemeToggle } from "../components/ThemeToggle.js";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -210,10 +211,7 @@ export function LandingPage() {
               style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-glass)" }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 md:px-8 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#16A97B] flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <span className="text-black text-sm font-bold">₦</span>
-            </div>
-            <span className="font-bold tracking-tight text-lg" style={{ color: "var(--text-primary)" }}>NairaRails</span>
+            <LogoLockup size={32} textSize="text-lg" />
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
@@ -246,7 +244,7 @@ export function LandingPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-[#16A97B] animate-pulse" />
             </div>
 
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.05] tracking-tight"
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-[1.1] tracking-tight"
                 style={{ color: "var(--text-primary)" }}>
               Every marketplace order<br />
               gets its own{" "}
@@ -287,14 +285,14 @@ export function LandingPage() {
               <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
                 The cost of spreadsheet plumbing
               </p>
-              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight leading-tight mt-2" style={{ color: "var(--text-primary)" }}>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight mt-2" style={{ color: "var(--text-primary)" }}>
                 ₦<Counter target={35560000000} />
               </h2>
               <p className="leading-relaxed text-sm sm:text-base" style={{ color: "var(--text-secondary)" }}>
                 Lost to publicly documented reconciliation failures in Nigeria between 2023 and 2024.
                 Every marketplace that reconciles manually is leaking margin on every edge case.
               </p>
-              <div className="p-4 rounded-xl"
+              <div className="p-4 rounded-xl mt-8"
                    style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}>
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -354,7 +352,7 @@ export function LandingPage() {
         <section id="how-it-works" className="space-y-12">
           <FadeSection className="text-center max-w-2xl mx-auto space-y-4">
             <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>The Flow</p>
-            <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: "var(--text-primary)" }}>How NairaRails works</h2>
+            <h2 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>How NairaRails works</h2>
             <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
               Three steps from order creation to settled funds. No changes to your checkout flow.
             </p>
@@ -395,7 +393,7 @@ export function LandingPage() {
           <div className="lg:col-span-7 space-y-6">
             <FadeSection className="space-y-4">
               <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Operations Hub</p>
-              <h2 className="text-3xl sm:text-4xl font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
+              <h2 className="text-xl sm:text-2xl font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
                 Every naira tagged.<br />Every exception visible.
               </h2>
               <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
@@ -427,7 +425,7 @@ export function LandingPage() {
         <section className="space-y-8">
           <FadeSection className="text-center max-w-2xl mx-auto space-y-4">
             <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Security & Reliability</p>
-            <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: "var(--text-primary)" }}>Engineering-first infrastructure</h2>
+            <h2 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Engineering-first infrastructure</h2>
             <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
               Every decision in the stack was made with financial correctness in mind.
             </p>
@@ -513,7 +511,7 @@ export function LandingPage() {
                      style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.30)", color: "var(--text-brand)" }}>
                   <Lock className="w-3.5 h-3.5" /> Production-ready infrastructure
                 </div>
-                <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-tight" style={{ color: "var(--text-primary)" }}>
+                <h2 className="text-2xl md:text-3xl font-bold tracking-tight leading-tight" style={{ color: "var(--text-primary)" }}>
                   Wire your marketplace<br />in one API call.
                 </h2>
                 <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>

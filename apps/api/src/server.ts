@@ -9,6 +9,8 @@ import { exceptionRouter } from "./routes/exceptions.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { adminRouter }     from "./routes/admin.js";
 import { merchantRouter }  from "./routes/merchants.js";
+import { authRouter }      from "./routes/auth.js";
+import { keysRouter }      from "./routes/keys.js";
 import { errorHandler }    from "./middleware/errorHandler.js";
 import { logger }          from "./lib/logger.js";
 
@@ -45,6 +47,8 @@ app.use((req, _res, next) => {
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/", healthRouter);
+app.use("/api/v1", authRouter);
+app.use("/api/v1", keysRouter);
 app.use("/api/v1", webhookRouter);
 app.use("/api/v1", orderRouter);
 app.use("/api/v1", exceptionRouter);

@@ -40,7 +40,7 @@ function StatCard({ label, value, sub, color = "default", loading, icon }: StatC
       {loading ? (
         <div className="h-8 w-28 skeleton rounded" />
       ) : (
-        <p className={`text-3xl font-bold tabular-nums ${COLOR_MAP[color]}`}>{value}</p>
+        <p className={`text-2xl font-bold tabular-nums ${COLOR_MAP[color]}`}>{value}</p>
       )}
       {sub && !loading && (
         <p className="text-xs text-slate-600 mt-1.5">{sub}</p>
@@ -101,7 +101,7 @@ export function OverviewPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-50">Overview</h2>
+          <h2 className="text-lg font-bold text-slate-50">Overview</h2>
           <p className="text-sm text-slate-500 mt-0.5">
             {data ? `All orders · as of ${data.date}` : "Loading…"}
           </p>

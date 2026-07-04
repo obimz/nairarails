@@ -1,407 +1,308 @@
 /**
- * OnboardingPage.tsx — merchant signup / API-key issuance
- *
- * Redesigned with glassmorphism, theme-aware CSS variables, and modern
- * two-column layout on desktop.  Preserves all existing API logic exactly.
+ * OnboardingPage.tsx — merchant registration. Sharp, minimal, no rounded inputs.
+ * Design: two-column on desktop (left = context, right = form), line-based fields.
  */
 
 import React from "react";
 import { useNavigate, Link } from "react-router-dom";
-import {
-  ArrowRight, Copy, Check, AlertCircle, Zap, Shield,
-  RefreshCw, ChevronRight,
-} from "lucide-react";
+import { ArrowRight, Check, AlertCircle, Zap, Shield, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { apiPost } from "../lib/apiFetch.js";
+import { LogoLockup } from "../components/Logo.js";
 import { ThemeToggle } from "../components/ThemeToggle.js";
 
-interface SignupResponse {
-  merchantId: string;
-  name:       string;
-  apiKey:     string;
-  message:    string;
-}
 type FormState = "idle" | "submitting" | "success" | "error";
 
-// ── Feature bullets shown on left panel ──────────────────────────────────────
 const FEATURES = [
-  {
-    icon: Zap,
-    title: "One API call to integrate",
-    desc: "Drop into your existing checkout with a single POST — no checkout flow changes.",
-  },
-  {
-    icon: Shield,
-    title: "HMAC-secured webhooks",
-    desc: "Every inbound event verified with timing-safe SHA-256 before processing.",
-  },
-  {
-    icon: RefreshCw,
-    title: "Instant split-settlement",
-    desc: "Seller, platform, rider — all paid in the same cycle the webhook fires.",
-  },
+  { icon: Zap,        title: "One API call",        desc: "Drop a single POST into your checkout — no flow changes." },
+  { icon: Shield,     title: "Auto-reconciliation",  desc: "Every payment classified and matched the moment it lands." },
+  { icon: RefreshCw,  title: "Instant split",        desc: "Seller, platform, rider — paid in the same webhook cycle." },
 ];
 
-// ── Success state ─────────────────────────────────────────────────────────────
-function SuccessScreen({
-  apiKey,
-  onCopy,
-  copied,
-  onNavigate,
+// ─── Field component ──────────────────────────────────────────────────────────
+
+function Field({
+  id, label, type = "text", placeholder, value, onChange,
+  autoComplete, required, suffix,
 }: {
-  apiKey: string;
-  onCopy: () => void;
-  copied: boolean;
-  onNavigate: () => void;
+  id: string;
+  label: string;
+  type?: string;
+  placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  required?: boolean;
+  suffix?: React.ReactNode;
 }) {
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-12 auth-bg transition-colors duration-300"
-      style={{ background: "var(--bg-base)" }}
-    >
-      <div className="w-full max-w-lg">
-        <div className="card-dark p-8 sm:p-10">
-
-          {/* Header */}
-          <div className="flex items-start gap-4 mb-8">
-            <div className="flex-shrink-0 w-12 h-12 rounded-2xl bg-[#16A97B]/15 border border-[#16A97B]/30 flex items-center justify-center">
-              <Check className="w-6 h-6 text-[#16A97B]" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold font-display" style={{ color: "var(--text-primary)" }}>
-                You're in.
-              </h1>
-              <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-                Your API key has been generated — copy it now.
-              </p>
-            </div>
-          </div>
-
-          {/* Warning banner */}
-          <div
-            className="flex gap-3 rounded-xl px-4 py-3 mb-6 text-sm"
-            style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)" }}
-          >
-            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-            <p style={{ color: "var(--text-secondary)" }}>
-              <strong className="text-amber-400">This is the only time your key will be shown.</strong>{" "}
-              Store it securely — we cannot recover it.
-            </p>
-          </div>
-
-          {/* Key display */}
-          <div className="rounded-xl overflow-hidden mb-8" style={{ border: "1px solid var(--border)" }}>
-            <div
-              className="flex items-center justify-between px-3 py-1.5"
-              style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
-            >
-              <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
-                x-api-key
-              </span>
-              <button
-                type="button"
-                onClick={onCopy}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all duration-200 cursor-pointer"
-                style={{
-                  background: copied ? "rgba(22,169,123,0.15)" : "var(--bg-glass)",
-                  color: copied ? "#16A97B" : "var(--text-secondary)",
-                  border: "1px solid var(--border)",
-                }}
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-            <div className="px-4 py-3" style={{ background: "var(--bg-base)" }}>
-              <code className="text-sm font-mono text-[#16A97B] break-all select-all">
-                {apiKey}
-              </code>
-            </div>
-          </div>
-
-          <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
-            Redirecting to dashboard in 5 seconds…
-          </p>
-
-          <button
-            type="button"
-            onClick={onNavigate}
-            className="btn-primary w-full justify-center gap-2 py-3.5 text-base"
-          >
-            Go to Dashboard
-            <ArrowRight className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+    <div className="relative" style={{ borderBottom: "1px solid var(--border)" }}>
+      <label htmlFor={id}
+             className="block text-[10px] font-semibold uppercase tracking-widest pt-4 pb-1"
+             style={{ color: "var(--text-muted)" }}>
+        {label}{required && <span className="ml-0.5 text-red-400">*</span>}
+      </label>
+      <input
+        id={id} type={type} required={required}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        value={value} onChange={e => onChange(e.target.value)}
+        className="w-full pb-3 pt-1 text-sm bg-transparent outline-none"
+        style={{
+          color:      "var(--text-primary)",
+          caretColor: "#16A97B",
+          paddingRight: suffix ? "2.5rem" : undefined,
+        }}
+      />
+      {suffix && (
+        <div className="absolute right-0 bottom-3">{suffix}</div>
+      )}
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export function OnboardingPage() {
   const navigate = useNavigate();
 
-  const [name,        setName]        = React.useState("");
-  const [email,       setEmail]       = React.useState("");
-  const [webhookUrl,  setWebhook]     = React.useState("");
-  const [formState,   setFormState]   = React.useState<FormState>("idle");
-  const [errorMsg,    setErrorMsg]    = React.useState("");
-  const [apiKey,      setApiKey]      = React.useState("");
-  const [copied,      setCopied]      = React.useState(false);
-
-  React.useEffect(() => {
-    if (formState !== "success") return;
-    const t = setTimeout(() => navigate("/dashboard/overview"), 5000);
-    return () => clearTimeout(t);
-  }, [formState, navigate]);
+  const [name,       setName]       = React.useState("");
+  const [email,      setEmail]      = React.useState("");
+  const [password,   setPassword]   = React.useState("");
+  const [showPass,   setShowPass]   = React.useState(false);
+  const [webhookUrl, setWebhook]    = React.useState("");
+  const [formState,  setFormState]  = React.useState<FormState>("idle");
+  const [errorMsg,   setErrorMsg]   = React.useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormState("submitting");
     setErrorMsg("");
     try {
-      const data = await apiPost<SignupResponse>("/api/v1/merchants/signup", {
+      await apiPost<{ merchantId: string; message: string }>("/api/v1/auth/register", {
         name,
         email,
+        password,
         ...(webhookUrl.trim() ? { webhookUrl: webhookUrl.trim() } : {}),
       });
-      localStorage.setItem("nairarails_api_key", data.apiKey);
-      setApiKey(data.apiKey);
       setFormState("success");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong.";
       setErrorMsg(
         msg.toLowerCase().includes("already registered")
-          ? "This email is already registered."
+          ? "This email is already registered — sign in instead."
           : msg
       );
       setFormState("error");
     }
   }
 
-  async function handleCopy() {
-    try { await navigator.clipboard.writeText(apiKey); } catch { /* ignore */ }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
+  // ── Success screen ──────────────────────────────────────────────────────────
   if (formState === "success") {
     return (
-      <SuccessScreen
-        apiKey={apiKey}
-        onCopy={handleCopy}
-        copied={copied}
-        onNavigate={() => navigate("/dashboard/overview")}
-      />
+      <div className="min-h-screen flex items-center justify-center px-6"
+           style={{ background: "var(--bg-base)" }}>
+        <div className="w-full max-w-sm">
+          <div className="w-10 h-10 flex items-center justify-center mb-6"
+               style={{ background: "rgba(22,169,123,0.12)", border: "1px solid rgba(22,169,123,0.30)" }}>
+            <Check className="w-5 h-5 text-[#16A97B]" />
+          </div>
+          <h1 className="text-xl font-bold font-display mb-2"
+              style={{ color: "var(--text-primary)" }}>
+            Check your email
+          </h1>
+          <p className="text-sm mb-8 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+            We sent a verification link to{" "}
+            <span className="font-medium" style={{ color: "var(--text-primary)" }}>{email}</span>.
+            Click it to verify your account, then sign in to get your API key.
+          </p>
+          <button type="button" onClick={() => navigate("/login")}
+                  className="flex items-center gap-2 text-sm font-semibold cursor-pointer text-[#16A97B] hover:underline">
+            Go to sign in <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen auth-bg transition-colors duration-300"
-      style={{ background: "var(--bg-base)" }}
-    >
-      {/* Top bar */}
+    <div className="min-h-screen flex" style={{ background: "var(--bg-base)" }}>
+
+      {/* ── Left panel ───────────────────────────────────────────────────────── */}
       <div
-        className="flex items-center justify-between px-6 py-4 backdrop-blur-sm"
-        style={{ borderBottom: "1px solid var(--border)" }}
+        className="hidden lg:flex flex-col justify-between w-[400px] xl:w-[460px] shrink-0 px-10 py-10"
+        style={{ borderRight: "1px solid var(--border)", background: "var(--bg-surface)" }}
       >
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#16A97B] flex items-center justify-center">
-            <span className="text-black text-xs font-bold">₦</span>
-          </div>
-          <span className="font-bold font-display text-sm" style={{ color: "var(--text-primary)" }}>NairaRails</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <ThemeToggle />
-          <Link
-            to="/login"
-            className="text-sm font-medium transition-colors duration-200 cursor-pointer"
-            style={{ color: "var(--text-muted)" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--text-brand)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
-          >
-            Sign in
-          </Link>
-        </div>
-      </div>
+        <Link to="/"><LogoLockup size={28} textSize="text-sm" /></Link>
 
-      <div className="flex min-h-[calc(100vh-61px)]">
-
-        {/* ── Left panel — feature highlights ─────────────────────────────────── */}
-        <aside className="hidden lg:flex flex-col justify-center w-[480px] xl:w-[520px] shrink-0 px-12 xl:px-16 py-16"
-          style={{ borderRight: "1px solid var(--border)" }}
-        >
-          {/* Brand */}
-          <div className="mb-10">
-            <div
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono mb-6"
-              style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.25)", color: "#16A97B" }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#16A97B] animate-pulse" />
-              Nomba × DevCareer Hackathon 2026
-            </div>
-            <h2 className="text-3xl xl:text-4xl font-bold font-display leading-tight mb-4"
+        <div className="space-y-10">
+          {/* Headline */}
+          <div>
+            <p className="text-xs font-mono uppercase tracking-widest mb-4"
+               style={{ color: "var(--text-muted)" }}>
+              Payment infrastructure
+            </p>
+            <h2 className="text-2xl font-bold font-display leading-snug mb-3"
                 style={{ color: "var(--text-primary)" }}>
-              Programmable payment infrastructure for Nigerian marketplaces
+              Every order gets its own bank account.
             </h2>
-            <p className="text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              Every order gets its own bank account. Every naira is traced, matched, and split — automatically.
+            <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              One API call at checkout. Payments matched, split, and settled automatically.
             </p>
           </div>
 
-          {/* Feature list */}
+          {/* Features */}
           <div className="space-y-6">
             {FEATURES.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="flex gap-4">
-                <div
-                  className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center mt-0.5"
-                  style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.20)" }}
-                >
-                  <Icon className="w-5 h-5 text-[#16A97B]" />
+              <div key={title} className="flex gap-3">
+                <div className="shrink-0 w-7 h-7 flex items-center justify-center mt-0.5"
+                     style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.20)" }}>
+                  <Icon className="w-3.5 h-3.5 text-[#16A97B]" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{title}</p>
-                  <p className="text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>{desc}</p>
+                  <p className="text-sm font-semibold mb-0.5" style={{ color: "var(--text-primary)" }}>{title}</p>
+                  <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>{desc}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Stat strip */}
-          <div
-            className="mt-10 grid grid-cols-3 gap-4 rounded-2xl p-5"
-            style={{ background: "var(--bg-glass)", border: "1px solid var(--border)" }}
-          >
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-px"
+               style={{ background: "var(--border)" }}>
             {[
-              { val: "₦35.56B", label: "Lost to reconciliation failures (2023–24)" },
-              { val: "1 call",   label: "To integrate NairaRails" },
-              { val: "< 1s",    label: "Settlement latency" },
+              { val: "₦35.56B", label: "Lost to reconciliation failures" },
+              { val: "1 call",  label: "To integrate" },
+              { val: "< 1s",   label: "Settlement latency" },
             ].map(({ val, label }) => (
-              <div key={val} className="text-center">
-                <div className="text-lg font-bold font-mono text-[#16A97B]">{val}</div>
-                <div className="text-[10px] mt-0.5 leading-tight" style={{ color: "var(--text-muted)" }}>{label}</div>
+              <div key={val} className="px-3 py-4"
+                   style={{ background: "var(--bg-surface)" }}>
+                <div className="text-base font-bold font-mono text-[#16A97B]">{val}</div>
+                <div className="text-[10px] mt-1 leading-tight" style={{ color: "var(--text-muted)" }}>{label}</div>
               </div>
             ))}
           </div>
-        </aside>
+        </div>
 
-        {/* ── Right panel — signup form ────────────────────────────────────────── */}
-        <main className="flex-1 flex items-center justify-center px-4 sm:px-8 py-16">
-          <div className="w-full max-w-md">
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          © {new Date().getFullYear()} NairaRails
+        </p>
+      </div>
+
+      {/* ── Right panel: form ─────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col">
+
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-6 py-5 lg:justify-end"
+             style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="lg:hidden">
+            <Link to="/"><LogoLockup size={26} textSize="text-sm" /></Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            <Link to="/login"
+                  className="text-xs font-medium transition-colors cursor-pointer"
+                  style={{ color: "var(--text-muted)" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}>
+              Already registered? Sign in →
+            </Link>
+          </div>
+        </div>
+
+        {/* Form body */}
+        <div className="flex-1 flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-sm">
+
             <div className="mb-8">
-              <h1 className="text-2xl sm:text-3xl font-bold font-display mb-2" style={{ color: "var(--text-primary)" }}>
-                Get API Access
+              <h1 className="text-xl font-bold font-display mb-1"
+                  style={{ color: "var(--text-primary)" }}>
+                Get API access
               </h1>
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                One signup. One key. Full payment infrastructure.
+                One account. One key. Full payment infrastructure.
               </p>
             </div>
 
-            <div className="card-dark p-8">
-              <form onSubmit={handleSubmit} noValidate>
-                <div className="space-y-5">
+            <form onSubmit={handleSubmit} noValidate>
+              <div className="space-y-0">
+                <Field id="name"     label="Marketplace name" required
+                       placeholder="e.g. Jumia Foods"
+                       value={name}       onChange={setName}
+                       autoComplete="organization" />
 
-                  {/* Marketplace name */}
-                  <div>
-                    <label htmlFor="name" className="block text-sm font-medium mb-1.5"
-                           style={{ color: "var(--text-secondary)" }}>
-                      Marketplace name <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      id="name" type="text" required autoComplete="organization"
-                      placeholder="e.g. Jumia Foods"
-                      value={name} onChange={e => setName(e.target.value)}
-                      className="input-dark"
-                    />
-                  </div>
+                <Field id="email"    label="Email address" type="email" required
+                       placeholder="dev@yourmarketplace.ng"
+                       value={email}      onChange={setEmail}
+                       autoComplete="email" />
 
-                  {/* Email */}
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-medium mb-1.5"
-                           style={{ color: "var(--text-secondary)" }}>
-                      Email address <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      id="email" type="email" required autoComplete="email"
-                      placeholder="dev@yourmarketplace.ng"
-                      value={email} onChange={e => setEmail(e.target.value)}
-                      className="input-dark"
-                    />
-                  </div>
+                <Field id="password" label="Password" type={showPass ? "text" : "password"} required
+                       placeholder="At least 8 characters"
+                       value={password}   onChange={setPassword}
+                       autoComplete="new-password"
+                       suffix={
+                         <button type="button" onClick={() => setShowPass(v => !v)}
+                                 aria-label={showPass ? "Hide" : "Show"}
+                                 className="cursor-pointer transition-colors"
+                                 style={{ color: "var(--text-muted)" }}>
+                           {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                         </button>
+                       } />
 
-                  {/* Webhook URL */}
-                  <div>
-                    <label htmlFor="webhook" className="block text-sm font-medium mb-1.5"
-                           style={{ color: "var(--text-secondary)" }}>
-                      Webhook URL{" "}
-                      <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>(optional)</span>
-                    </label>
-                    <input
-                      id="webhook" type="url" autoComplete="url"
-                      placeholder="https://yourapp.ng/webhooks/nairarails"
-                      value={webhookUrl} onChange={e => setWebhook(e.target.value)}
-                      className="input-dark"
-                    />
-                    <p className="mt-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                      We'll POST a{" "}
-                      <code className="font-mono text-[#16A97B]">payment.classified</code>{" "}
-                      event here when each payment is processed.
-                    </p>
-                  </div>
-
-                  {/* Error */}
-                  {formState === "error" && (
-                    <div
-                      role="alert"
-                      className="flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm text-red-400"
-                      style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}
-                    >
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      {errorMsg}
-                    </div>
-                  )}
-
-                  {/* Submit */}
-                  <button
-                    type="submit"
-                    disabled={formState === "submitting" || !name.trim() || !email.trim()}
-                    className="btn-primary w-full justify-center gap-2 py-3.5 text-base"
-                  >
-                    {formState === "submitting" ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                        Creating your account…
-                      </>
-                    ) : (
-                      <>
-                        Get my API key
-                        <ArrowRight className="w-5 h-5" />
-                      </>
-                    )}
-                  </button>
+                <div style={{ borderBottom: "1px solid var(--border)" }}>
+                  <label htmlFor="webhook"
+                         className="block text-[10px] font-semibold uppercase tracking-widest pt-4 pb-1"
+                         style={{ color: "var(--text-muted)" }}>
+                    Webhook URL <span className="normal-case font-normal tracking-normal text-[10px]">(optional)</span>
+                  </label>
+                  <input id="webhook" type="url" autoComplete="url"
+                         placeholder="https://yourapp.ng/webhooks/nairarails"
+                         value={webhookUrl} onChange={e => setWebhook(e.target.value)}
+                         className="w-full pb-3 pt-1 text-sm bg-transparent outline-none"
+                         style={{ color: "var(--text-primary)", caretColor: "#16A97B" }} />
                 </div>
-              </form>
-
-              <div
-                className="mt-6 pt-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
-                style={{ borderTop: "1px solid var(--border)", color: "var(--text-muted)" }}
-              >
-                <span>Already have a key?</span>
-                <Link
-                  to="/login"
-                  className="inline-flex items-center gap-1 font-medium text-[#16A97B] hover:text-[#128a64] transition-colors cursor-pointer"
-                >
-                  Sign in to dashboard <ChevronRight className="w-3.5 h-3.5" />
-                </Link>
               </div>
-            </div>
 
-            <p className="text-center text-xs mt-6" style={{ color: "var(--text-muted)" }}>
-              By signing up you agree to use this key responsibly.
-              API keys are shown once and not recoverable.
+              {/* Error */}
+              {formState === "error" && (
+                <div role="alert"
+                     className="mt-4 flex items-start gap-2 text-xs text-red-400"
+                     style={{ borderLeft: "2px solid #f87171", paddingLeft: "8px" }}>
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  {errorMsg}
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={formState === "submitting" || !name.trim() || !email.trim() || password.length < 8}
+                className="mt-8 w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-black transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "#16A97B",
+                  boxShadow: "0 4px 20px rgba(22,169,123,0.30)",
+                }}
+                onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#128a64"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "#16A97B"; }}
+              >
+                {formState === "submitting" ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    Creating account…
+                  </>
+                ) : (
+                  <>
+                    Create account
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <p className="mt-6 text-xs" style={{ color: "var(--text-muted)" }}>
+              By registering you agree to use this key responsibly.
             </p>
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );

@@ -18,7 +18,7 @@ export interface OrderListItem {
   customer_name:          string;
   expected_amount_kobo:   number;
   received_amount_kobo:   number | null;
-  status:                 "pending" | "paid" | "underpayment" | "overpayment" | "unmatched";
+  status:                 "pending" | "paid" | "underpayment" | "overpayment" | "unmatched" | "refunded" | "expired";
   virtual_account_number: string;
   created_at:             string;
 }
@@ -157,6 +157,20 @@ export function useRefundExcess() {
       apiPost<RefundExcessResponse>(`/api/v1/exceptions/${encodeURIComponent(orderRef)}/refund-excess`),
     onSuccess: () => {
       // Invalidate everything that could reflect the resolved exception
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptions() });
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.orders() });
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.dashboard() });
+    },
+  });
+}
+
+// ─── useRefundShortfall ──────────────────────────────────────────────────────
+export function useRefundShortfall() {
+  const qc = useQueryClient();
+  return useMutation<RefundExcessResponse, Error, string>({
+    mutationFn: (orderRef: string) =>
+      apiPost<RefundExcessResponse>(`/api/v1/exceptions/${encodeURIComponent(orderRef)}/refund-shortfall`),
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptions() });
       void qc.invalidateQueries({ queryKey: QUERY_KEYS.orders() });
       void qc.invalidateQueries({ queryKey: QUERY_KEYS.dashboard() });
