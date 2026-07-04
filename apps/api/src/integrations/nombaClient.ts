@@ -256,10 +256,10 @@ export interface NombaBank {
  * Use the returned `code` as `bankCode` in lookup and transfer requests.
  */
 export async function fetchBankCodes(): Promise<NombaBank[]> {
-  type BanksResponse = { data: { results: { code: string; name: string }[] } };
+  type BanksResponse = { data: { code: string; name: string }[] };
 
   const response = await nombaRequest<BanksResponse>("GET", "/transfers/banks");
-  return response.data.results.map((b) => ({ code: b.code, name: b.name }));
+  return response.data.map((b) => ({ code: b.code, name: b.name }));
 }
 
 // ─── Transfers ────────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 import { AppError } from "../middleware/errorHandler.js";
 import { prisma } from "../db/client.js";
 import { createVirtualAccount } from "../integrations/nombaClient.js";
+import { validateSplitBankCodes } from "../lib/bankValidator.js";
 import { logger } from "../lib/logger.js";
 
 const router: ExpressRouter = Router();
@@ -32,6 +33,14 @@ router.post(
       const merchant = res.locals.merchant;
       const { order_ref, customer_name, customer_email, expected_amount_kobo, currency, splits } =
         req.body as import("@nairarails/shared-types").CreateOrderRequest;
+
+      // Step 0: Validate all split bank codes against Nomba's supported list.
+      // Fail fast here so the merchant gets a clear error before any DB writes
+      // or Nomba calls are made.
+      const bankErrors = validateSplitBankCodes(splits);
+      if (bankErrors.length > 0) {
+        throw new AppError(422, "INVALID_BANK_CODE", bankErrors[0]!);
+      }
 
       // Step 1: Insert order + splits atomically.
       // Nomba call is intentionally OUTSIDE this transaction — if the VA call
