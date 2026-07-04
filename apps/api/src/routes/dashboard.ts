@@ -1,13 +1,13 @@
 import { Router, type Router as ExpressRouter } from "express";
 import { prisma } from "../db/client.js";
 import { logger } from "../lib/logger.js";
-import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
+import { jwtAuth } from "../middleware/jwtAuth.js";
 
 const router: ExpressRouter = Router();
 
 // ─── GET /api/v1/dashboard/overview ──────────────────────────────────────────
 // Aggregates order stats scoped to the calling merchant.
-router.get("/dashboard/overview", apiKeyAuth, async (_req, res, next) => {
+router.get("/dashboard/overview", jwtAuth, async (_req, res, next) => {
   try {
     const merchant = res.locals.merchant;
     const merchantId = merchant.id;
