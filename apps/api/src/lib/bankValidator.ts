@@ -666,6 +666,3 @@ export function validateSplitBankCodes(
   }
   return errors;
 }
-  }
-  return errors;
-}
