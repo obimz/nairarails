@@ -157,8 +157,16 @@ function AdminLogin({ onAuth }: { onAuth: (secret: string) => void }) {
       // Probe a cheap endpoint to verify the secret before entering the panel.
       await adminFetch("GET", "/api/v1/admin/banks", input.trim());
       onAuth(input.trim());
-    } catch {
-      setError("Invalid secret — check ADMIN_SECRET in your environment");
+    } catch (err: unknown) {
+      // 401 = wrong secret. Anything else (500, network) = secret is fine,
+      // let them in anyway — the panel will show errors per-action.
+      const is401 = err instanceof Error && "status" in err && (err as { status: number }).status === 401;
+      if (is401) {
+        setError("Invalid secret — check ADMIN_SECRET in your environment");
+      } else {
+        // Secret accepted but banks endpoint failed (Nomba error etc.) — still unlock
+        onAuth(input.trim());
+      }
     } finally {
       setLoading(false);
     }
