@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "pnpm install && pnpm --filter @nairarails/api build"
+buildCommand = "NODE_ENV=development pnpm install && pnpm --filter @nairarails/api build"
 
 [deploy]
 # start.sh: runs `prisma migrate deploy` then starts the server.
