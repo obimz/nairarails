@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "prisma generate --schema=prisma/schema.prisma && tsc -b",
+    "build": "prisma generate --schema=prisma/schema.prisma && tsc -b && node -e \"require('fs').cpSync('src/lib/banks.json','dist/lib/banks.json')\"",
     "dev": "tsx watch --env-file=../../.env src/server.ts",
     "start": "node dist/server.js",
     "db:migrate": "npx prisma migrate deploy --schema=prisma/schema.prisma",

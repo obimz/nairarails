@@ -6,14 +6,20 @@
  * VA is provisioned and before any transfer is attempted — so merchants get a
  * clear 422 instead of a cryptic Nomba error at settlement.
  *
- * The JSON is loaded once at module init (sync import). Refresh by re-running
- * the admin /banks endpoint and replacing apps/api/src/lib/banks.json.
+ * The JSON is loaded once at module init. Refresh by re-running the admin
+ * /banks endpoint and replacing apps/api/src/lib/banks.json.
  */
 
-import { createRequire } from "module";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { join, dirname } from "path";
 
-const require = createRequire(import.meta.url);
-const bankList = require("./banks.json") as { name: string; code: string }[];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = dirname(__filename);
+
+const bankList = JSON.parse(
+  readFileSync(join(__dirname, "banks.json"), "utf-8")
+) as { name: string; code: string }[];
 
 // Build a lookup map: code → name (trimmed)
 const bankMap = new Map<string, string>(
