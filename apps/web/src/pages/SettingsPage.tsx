@@ -54,7 +54,7 @@ function fmtDate(iso: string | null | undefined) {
 }
 
 function SectionHeading({ icon: Icon, title, subtitle }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   title: string;
   subtitle?: string;
 }) {
