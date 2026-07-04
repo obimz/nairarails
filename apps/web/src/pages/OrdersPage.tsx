@@ -1,5 +1,5 @@
 import React from "react";
-import { RefreshCw, X, AlertTriangle } from "lucide-react";
+import { RefreshCw, X, AlertTriangle, Calendar } from "lucide-react";
 import {
   useOrders,
   useReconciliation,
@@ -263,12 +263,20 @@ function OrderRow({ order, onClick, selected }: {
 export function OrdersPage() {
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [selectedRef,  setSelectedRef]  = React.useState<string | null>(null);
+  const [dateFrom,     setDateFrom]     = React.useState("");
+  const [dateTo,       setDateTo]       = React.useState("");
 
-  const { data, isLoading, isError, error, refetch } = useOrders(
-    statusFilter === "all" ? undefined : statusFilter
-  );
+  const { data, isLoading, isError, error, refetch } = useOrders({
+    status:    statusFilter === "all" ? undefined : statusFilter,
+    date_from: dateFrom || undefined,
+    date_to:   dateTo   || undefined,
+  });
 
   const orders = data?.results ?? [];
+
+  function clearDates() { setDateFrom(""); setDateTo(""); }
+
+  const hasDateFilter = Boolean(dateFrom || dateTo);
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -292,22 +300,51 @@ export function OrdersPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1.5 mb-5 flex-wrap">
+      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
         {FILTERS.map(({ value, label }) => (
           <button
             key={value}
             type="button"
             onClick={() => { setStatusFilter(value); setSelectedRef(null); }}
-            className={[
-              "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-150 cursor-pointer",
-              statusFilter === value
-                ? "bg-green-500/15 text-green-400 border border-green-500/30"
-                : "bg-white/5 text-slate-500 border border-white/10 hover:text-slate-300 hover:bg-white/10",
-            ].join(" ")}
+            className={statusFilter === value ? "filter-pill-active" : "filter-pill"}
           >
             {label}
           </button>
         ))}
+      </div>
+
+      {/* Date filter */}
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <Calendar className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--text-muted)" }} />
+        <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
+          From
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setSelectedRef(null); }}
+            className="date-input"
+          />
+        </label>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+        <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
+          To
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setSelectedRef(null); }}
+            className="date-input"
+          />
+        </label>
+        {hasDateFilter && (
+          <button
+            type="button"
+            onClick={clearDates}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-colors bg-white/5 border border-white/10 hover:bg-white/10"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <X className="w-3 h-3" /> Clear dates
+          </button>
+        )}
       </div>
 
       {/* Loading */}

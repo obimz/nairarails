@@ -16,7 +16,9 @@ const router: ExpressRouter = Router();
 const ListOrdersQuerySchema = z.object({
   page:      z.coerce.number().int().positive().default(1),
   page_size: z.coerce.number().int().positive().max(100).default(20),
-  status:    z.enum(["pending", "paid", "underpayment", "overpayment", "unmatched"]).optional(),
+  status:    z.enum(["pending", "paid", "underpayment", "overpayment", "unmatched", "expired"]).optional(),
+  date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date_from must be YYYY-MM-DD").optional(),
+  date_to:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date_to must be YYYY-MM-DD").optional(),
 });
 
 // ─── POST /api/v1/orders ──────────────────────────────────────────────────────
@@ -126,13 +128,19 @@ router.get("/orders", apiKeyAuth, async (req, res, next) => {
     if (!query.success) {
       throw new AppError(422, "VALIDATION_ERROR", "Invalid query parameters");
     }
-    const { page, page_size, status } = query.data;
+    const { page, page_size, status, date_from, date_to } = query.data;
     const skip = (page - 1) * page_size;
 
-    // Always scope to the calling merchant; optionally filter by status too.
+    // Always scope to the calling merchant; optionally filter by status and date.
     const where: Prisma.OrderWhereInput = {
       merchantId: merchant.id,
       ...(status ? { status: status as Prisma.EnumOrderStatusFilter } : {}),
+      ...(date_from || date_to ? {
+        createdAt: {
+          ...(date_from ? { gte: new Date(`${date_from}T00:00:00.000Z`) } : {}),
+          ...(date_to   ? { lte: new Date(`${date_to}T23:59:59.999Z`)   } : {}),
+        },
+      } : {}),
     };
 
     const [orders, total_count] = await Promise.all([

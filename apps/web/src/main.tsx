@@ -20,6 +20,8 @@ import { ExceptionsPage } from "./pages/ExceptionsPage.js";
 import { ProtectedRoute } from "./components/ProtectedRoute.js";
 import { ThemeProvider }  from "./contexts/ThemeContext.js";
 import { ThemeToggle }    from "./components/ThemeToggle.js";
+import { AdminPage }      from "./pages/AdminPage.js";
+import { DocsPage }       from "./pages/DocsPage.js";
 import "./index.css";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -127,6 +129,8 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/signup" element={<OnboardingPage />} />
       <Route path="/login"  element={<LoginPage />} />
+      <Route path="/admin"  element={<AdminPage />} />
+      <Route path="/docs"   element={<DocsPage />} />
 
       {/* Protected dashboard */}
       <Route

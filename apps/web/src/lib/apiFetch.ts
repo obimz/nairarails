@@ -101,6 +101,50 @@ export const apiGet = <T>(path: string) =>
 export const apiPost = <T>(path: string, body?: unknown) =>
   apiFetch<T>(path, {
     method: "POST",
-    // null is acceptable as BodyInit; undefined is not with exactOptionalPropertyTypes
     body:   body !== undefined ? JSON.stringify(body) : null,
   });
+
+// ─── Admin helpers ────────────────────────────────────────────────────────────
+// Uses x-admin-secret header instead of x-api-key.
+// Secret is passed explicitly per call — never stored in localStorage.
+
+export async function adminFetch<T>(
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  secret: string,
+  body?: unknown
+): Promise<T> {
+  const url = `${API_BASE}${path}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type":    "application/json",
+        "x-admin-secret":  secret,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (networkErr) {
+    throw new Error(`Network error reaching ${url}: ${String(networkErr)}`);
+  }
+
+  let responseBody: unknown;
+  try {
+    responseBody = await res.json();
+  } catch {
+    throw new Error(`Non-JSON response from ${url} (status ${res.status})`);
+  }
+
+  if (!res.ok) {
+    const errShape = responseBody as { error?: string | { message?: string } };
+    const message =
+      typeof errShape.error === "string"
+        ? errShape.error
+        : errShape.error?.message ?? `Request failed with status ${res.status}`;
+    throw new ApiError(res.status, "ADMIN_ERROR", message);
+  }
+
+  return responseBody as T;
+}

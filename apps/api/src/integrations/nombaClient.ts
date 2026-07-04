@@ -43,7 +43,7 @@ let tokenExpiresAt: number = 0; // unix ms — refresh when within 5 min of expi
 // Throws a descriptive Error on any non-2xx response so callers can catch + surface it.
 // Pass `baseUrl` to override the default BASE_URL (e.g. BASE_URL_V2 for transfers).
 async function nombaRequest<T>(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body?: Record<string, unknown>,
   skipAuth = false,
@@ -215,6 +215,53 @@ export async function createVirtualAccount(
   return result;
 }
 
+/**
+ * Expire a virtual account on Nomba's side.
+ * DELETE /v1/accounts/virtual/{identifier}
+ *
+ * identifier = the accountRef used when creating the VA (i.e. our order_ref).
+ * Returns { expired: true } on success.
+ * Call this whenever we mark an order expired or nuke it locally so Nomba's
+ * side stays in sync and the VA stops accepting payments.
+ */
+export async function expireVirtualAccount(accountRef: string): Promise<void> {
+  logger.info({ accountRef }, "Expiring Nomba virtual account");
+
+  type ExpireResponse = { data: { expired: boolean } };
+
+  const response = await nombaRequest<ExpireResponse>(
+    "DELETE",
+    `/accounts/virtual/${encodeURIComponent(accountRef)}`
+  );
+
+  if (!response.data.expired) {
+    throw new Error(`expireVirtualAccount: Nomba did not confirm expiry for ref ${accountRef}`);
+  }
+
+  logger.info({ accountRef }, "Nomba virtual account expired");
+}
+
+// ─── Bank Codes ───────────────────────────────────────────────────────────────
+
+export interface NombaBank {
+  code: string;
+  name: string;
+}
+
+/**
+ * Fetch all supported bank codes from Nomba.
+ * GET /v1/transfers/banks
+ *
+ * Call once and cache — bank codes rarely change.
+ * Use the returned `code` as `bankCode` in lookup and transfer requests.
+ */
+export async function fetchBankCodes(): Promise<NombaBank[]> {
+  type BanksResponse = { data: { results: { code: string; name: string }[] } };
+
+  const response = await nombaRequest<BanksResponse>("GET", "/transfers/banks");
+  return response.data.results.map((b) => ({ code: b.code, name: b.name }));
+}
+
 // ─── Transfers ────────────────────────────────────────────────────────────────
 
 export interface LookupBankAccountParams {
@@ -228,10 +275,10 @@ export interface LookupBankAccountResult {
 
 /**
  * Resolve a bank account number to the registered account name.
- * POST /v2/transfers/bank/{subAccountId}/lookup
+ * POST /v1/transfers/bank/lookup
  *
- * Transfers (including lookup) live on v2, scoped to the sub-account.
- * Authorization header still carries the parent accountId.
+ * Lookup is v1 with no subAccountId — only the actual transfer is v2/subAccountId.
+ * Source: Nomba API reference ("POST /v1/transfers/bank/lookup").
  *
  * ALWAYS call this before transferToBank — sending to a wrong NUBAN can be
  * irreversible, and the resolved name is a required field on the transfer.
@@ -243,13 +290,21 @@ export async function lookupBankAccount(
 
   logger.info({ bankCode, accountNumber }, "Looking up bank account");
 
-  const response = await nombaRequest<{ data: { accountName: string } }>(
-    "POST",
-    `/transfers/bank/${SUB_ACCOUNT_ID}/lookup`,
-    { bankCode, accountNumber },
-    false,
-    BASE_URL_V2
-  );
+  let response: { data: { accountName: string } };
+  try {
+    response = await nombaRequest<{ data: { accountName: string } }>(
+      "POST",
+      `/transfers/bank/lookup`,
+      { bankCode, accountNumber }
+      // default BASE_URL = v1, no subAccountId
+    );
+  } catch (err) {
+    logger.error(
+      { bankCode, accountNumber, err },
+      "Bank account lookup failed — check that bankCode and accountNumber are valid Nomba values"
+    );
+    throw err;
+  }
 
   const accountName = response.data.accountName;
   logger.info({ bankCode, accountNumber, accountName }, "Bank account resolved");
