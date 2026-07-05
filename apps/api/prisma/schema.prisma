@@ -55,15 +55,31 @@ model Order {
 // ─── Merchants ───────────────────────────────────────────────────────────────
 // One row per marketplace merchant integrating with NairaRails.
 model Merchant {
-  id        String   @id @default(cuid()) @map("id")
-  name      String   @map("name")
-  email     String   @unique @map("email")
-  apiKey    String   @unique @default(cuid()) @map("api_key")
-  webhookUrl String? @map("webhook_url")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(cuid()) @map("id")
+  name          String   @map("name")
+  email         String   @unique @map("email")
+  webhookUrl    String?  @map("webhook_url")
 
-  orders    Order[]
+  /// Supabase Auth user ID — links this merchant row to their auth identity
+  supabaseUid   String?  @unique @map("supabase_uid")
+  /// False until the merchant clicks the verification link in their signup email
+  emailVerified Boolean  @default(false) @map("email_verified")
+
+  /// API key stored as SHA-256 hash — plaintext is shown once at issuance, never stored
+  apiKeyHash    String?  @unique @map("api_key_hash")
+  /// First 20 chars of the prefixed key, for display only (e.g. "nrk_live_3f9a2c1b…")
+  apiKeyPrefix  String?  @map("api_key_prefix")
+  apiKeyIssuedAt  DateTime? @map("api_key_issued_at")
+  /// Null = never expires. Set via keys/rotate or keys/issue to add a hard expiry.
+  apiKeyExpiresAt DateTime? @map("api_key_expires_at")
+
+  /// Webhook secret for signing outbound payloads — generated on signup, rotatable via settings
+  webhookSecret String?  @map("webhook_secret")
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  orders        Order[]
 
   @@map("merchants")
 }
@@ -74,6 +90,8 @@ enum OrderStatus {
   underpayment
   overpayment
   unmatched
+  expired       // VA expired with no payment received — terminal state, no further action expected
+  refunded      // full or partial refund issued, order closed
 
   @@map("order_status")
 }
