@@ -36,44 +36,48 @@ export async function apiKeyAuth(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const key = req.headers["x-api-key"];
+  try {
+    const key = req.headers["x-api-key"];
 
-  if (!key || typeof key !== "string") {
-    res.status(401).json({
-      error: { code: "MISSING_API_KEY", message: "Request requires an x-api-key header" },
-    });
-    return;
+    if (!key || typeof key !== "string") {
+      res.status(401).json({
+        error: { code: "MISSING_API_KEY", message: "Request requires an x-api-key header" },
+      });
+      return;
+    }
+
+    // Hash the incoming key and look up by hash — never compare plaintext
+    const hash = crypto.createHash("sha256").update(key).digest("hex");
+    const merchant = await prisma.merchant.findUnique({ where: { apiKeyHash: hash } });
+
+    if (!merchant) {
+      logger.warn({ path: req.path }, "Invalid API key rejected");
+      res.status(401).json({
+        error: { code: "INVALID_API_KEY", message: "The provided API key is not valid" },
+      });
+      return;
+    }
+
+    // Check expiry if set
+    if (merchant.apiKeyExpiresAt && merchant.apiKeyExpiresAt < new Date()) {
+      logger.warn({ path: req.path, merchantId: merchant.id }, "Expired API key rejected");
+      res.status(401).json({
+        error: { code: "INVALID_API_KEY", message: "This API key has expired — rotate it from your dashboard" },
+      });
+      return;
+    }
+
+    // Check email is verified
+    if (!merchant.emailVerified) {
+      res.status(403).json({
+        error: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email address before using the API" },
+      });
+      return;
+    }
+
+    res.locals.merchant = merchant;
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  // Hash the incoming key and look up by hash — never compare plaintext
-  const hash = crypto.createHash("sha256").update(key).digest("hex");
-  const merchant = await prisma.merchant.findUnique({ where: { apiKeyHash: hash } });
-
-  if (!merchant) {
-    logger.warn({ path: req.path }, "Invalid API key rejected");
-    res.status(401).json({
-      error: { code: "INVALID_API_KEY", message: "The provided API key is not valid" },
-    });
-    return;
-  }
-
-  // Check expiry if set
-  if (merchant.apiKeyExpiresAt && merchant.apiKeyExpiresAt < new Date()) {
-    logger.warn({ path: req.path, merchantId: merchant.id }, "Expired API key rejected");
-    res.status(401).json({
-      error: { code: "INVALID_API_KEY", message: "This API key has expired — rotate it from your dashboard" },
-    });
-    return;
-  }
-
-  // Check email is verified
-  if (!merchant.emailVerified) {
-    res.status(403).json({
-      error: { code: "EMAIL_NOT_VERIFIED", message: "Verify your email address before using the API" },
-    });
-    return;
-  }
-
-  res.locals.merchant = merchant;
-  next();
 }

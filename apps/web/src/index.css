@@ -477,6 +477,38 @@ html.light {
     background: var(--brand);
     opacity: 0.6;
   }
+
+  /* ── Light mode: dashboard glass sidebar ───────────────────────────────── */
+  /* The sidebar uses a hardcoded dark gradient — flip to surface white in light */
+  html.light aside.fixed.inset-y-0.left-0 {
+    background: var(--bg-surface) !important;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.06) !important;
+    border-right-color: var(--border) !important;
+  }
+
+  /* ── Light mode: docs page fenced code blocks ──────────────────────────── */
+  /* Use a light code background instead of var(--bg-base) which is dark */
+  html.light .docs-content pre {
+    background: #f6f8fa !important;   /* github light code bg */
+    border-color: var(--border) !important;
+  }
+  /* Override github-dark highlight.js token colours for light mode readability */
+  html.light .hljs             { background: transparent !important; color: #24292e !important; }
+  html.light .hljs-keyword,
+  html.light .hljs-built_in    { color: #d73a49 !important; }
+  html.light .hljs-string      { color: #032f62 !important; }
+  html.light .hljs-number,
+  html.light .hljs-literal     { color: #005cc5 !important; }
+  html.light .hljs-comment     { color: #6a737d !important; font-style: italic; }
+  html.light .hljs-attr,
+  html.light .hljs-attribute   { color: #005cc5 !important; }
+  html.light .hljs-title,
+  html.light .hljs-section     { color: #6f42c1 !important; }
+  html.light .hljs-variable    { color: #e36209 !important; }
+  html.light .hljs-type        { color: #6f42c1 !important; }
+  html.light .hljs-tag         { color: #22863a !important; }
+  html.light .hljs-deletion    { color: #b31d28 !important; background: #ffeef0 !important; }
+  html.light .hljs-addition    { color: #22863a !important; background: #f0fff4 !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════

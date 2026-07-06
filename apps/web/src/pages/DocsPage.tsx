@@ -36,9 +36,9 @@ function CodeCopyButton({ getText }: { getText: () => string }) {
       onClick={handleCopy}
       className="absolute top-2.5 right-2.5 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer"
       style={{
-        background: copied ? "rgba(22,169,123,0.20)" : "rgba(255,255,255,0.08)",
-        border:     `1px solid ${copied ? "rgba(22,169,123,0.40)" : "rgba(255,255,255,0.12)"}`,
-        color:      copied ? "#16A97B" : "rgba(255,255,255,0.55)",
+        background: copied ? "rgba(22,169,123,0.20)" : "var(--bg-elevated)",
+        border:     `1px solid ${copied ? "rgba(22,169,123,0.40)" : "var(--border-hover)"}`,
+        color:      copied ? "var(--text-brand)" : "var(--text-muted)",
       }}
       aria-label="Copy code"
     >
@@ -81,12 +81,19 @@ function NavItem({
         background: active ? "rgba(22,169,123,0.12)" : "transparent",
         color: active ? "var(--text-brand)" : "var(--text-secondary)",
         fontWeight: active ? 600 : 400,
+        border: active ? "1px solid rgba(22,169,123,0.20)" : "1px solid transparent",
       }}
       onMouseEnter={e => {
-        if (!active) e.currentTarget.style.background = "var(--bg-glass-hover)";
+        if (!active) {
+          e.currentTarget.style.background = "var(--bg-elevated)";
+          e.currentTarget.style.color = "var(--text-primary)";
+        }
       }}
       onMouseLeave={e => {
-        if (!active) e.currentTarget.style.background = "transparent";
+        if (!active) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--text-secondary)";
+        }
       }}
     >
       {section.label}
@@ -195,7 +202,7 @@ const mdComponents = {
     return (
       <code
         className="font-mono text-xs px-1.5 py-0.5 rounded"
-        style={{ background: "rgba(22,169,123,0.10)", color: "#16A97B" }}
+        style={{ background: "rgba(22,169,123,0.10)", color: "var(--text-brand)" }}
       >
         {children}
       </code>
@@ -210,7 +217,7 @@ const mdComponents = {
 
     return (
       <div className="relative my-4 rounded-xl overflow-hidden"
-           style={{ background: "#0d1117", border: "1px solid var(--border)" }}>
+           style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
         <CodeCopyButton getText={getText} />
         <pre ref={textRef} className="p-4 pt-10 text-xs font-mono leading-relaxed overflow-x-auto">
           {children}
@@ -269,7 +276,7 @@ export function DocsPage() {
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <header
         className="sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 h-14 backdrop-blur-sm"
-        style={{ borderBottom: "1px solid var(--border)", background: "rgba(10,14,20,0.85)" }}
+        style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-glass)" }}
       >
         <div className="flex items-center gap-3">
           {/* Mobile sidebar toggle */}

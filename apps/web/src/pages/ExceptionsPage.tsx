@@ -9,6 +9,7 @@ import {
 } from "../hooks/index.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { formatNaira } from "../lib/money.js";
+import { useToast } from "../contexts/ToastContext.js";
 
 // ─── Confirmation modal ───────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ const TABS: { type: ExceptionType; label: string }[] = [
 function ExceptionRow({ exception }: { exception: Exception }) {
   const refundExcess     = useRefundExcess();
   const refundShortfall  = useRefundShortfall();
+  const toast = useToast();
 
   const [confirmModal, setConfirmModal] = React.useState<null | "excess" | "shortfall">(null);
 
@@ -124,7 +126,16 @@ function ExceptionRow({ exception }: { exception: Exception }) {
           danger
           loading={refundExcess.isPending}
           onConfirm={() => {
-            refundExcess.mutate(exception.order_ref, { onSuccess: () => setConfirmModal(null) });
+            refundExcess.mutate(exception.order_ref, {
+              onSuccess: () => {
+                setConfirmModal(null);
+                toast.success(`Excess of ${formatNaira(exception.excess_kobo)} refunded`, "Refund sent");
+              },
+              onError: (err) => {
+                setConfirmModal(null);
+                toast.error(err.message, "Refund failed");
+              },
+            });
           }}
           onCancel={() => setConfirmModal(null)}
         />
@@ -137,7 +148,16 @@ function ExceptionRow({ exception }: { exception: Exception }) {
           danger
           loading={refundShortfall.isPending}
           onConfirm={() => {
-            refundShortfall.mutate(exception.order_ref, { onSuccess: () => setConfirmModal(null) });
+            refundShortfall.mutate(exception.order_ref, {
+              onSuccess: () => {
+                setConfirmModal(null);
+                toast.success(`${formatNaira(exception.received_amount_kobo)} returned to buyer`, "Refund sent");
+              },
+              onError: (err) => {
+                setConfirmModal(null);
+                toast.error(err.message, "Refund failed");
+              },
+            });
           }}
           onCancel={() => setConfirmModal(null)}
         />
@@ -173,43 +193,33 @@ function ExceptionRow({ exception }: { exception: Exception }) {
               Resolved
             </span>
           ) : isOverpayment ? (
-            <div className="flex flex-col gap-1">
-              <button
-                type="button"
-                onClick={() => setConfirmModal("excess")}
-                disabled={refundExcess.isPending}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-                style={{
-                  background: "rgba(239,68,68,0.10)",
-                  border: "1px solid rgba(239,68,68,0.30)",
-                  color: "#f87171",
-                }}
-              >
-                Refund Excess
-              </button>
-              {refundExcess.isError && refundExcess.variables === exception.order_ref && (
-                <p className="text-xs text-red-500">{refundExcess.error.message}</p>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => setConfirmModal("excess")}
+              disabled={refundExcess.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+              style={{
+                background: "rgba(239,68,68,0.10)",
+                border: "1px solid rgba(239,68,68,0.30)",
+                color: "#f87171",
+              }}
+            >
+              Refund Excess
+            </button>
           ) : isUnderpayment ? (
-            <div className="flex flex-col gap-1">
-              <button
-                type="button"
-                onClick={() => setConfirmModal("shortfall")}
-                disabled={refundShortfall.isPending}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
-                style={{
-                  background: "rgba(239,68,68,0.10)",
-                  border: "1px solid rgba(239,68,68,0.30)",
-                  color: "#f87171",
-                }}
-              >
-                Refund to Buyer
-              </button>
-              {refundShortfall.isError && refundShortfall.variables === exception.order_ref && (
-                <p className="text-xs text-red-500">{refundShortfall.error.message}</p>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => setConfirmModal("shortfall")}
+              disabled={refundShortfall.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all"
+              style={{
+                background: "rgba(239,68,68,0.10)",
+                border: "1px solid rgba(239,68,68,0.30)",
+                color: "#f87171",
+              }}
+            >
+              Refund to Buyer
+            </button>
           ) : (
             <span className="text-xs text-slate-600">Manual review</span>
           )}
@@ -267,6 +277,12 @@ function ExceptionTable({ type, items }: { type: ExceptionType; items: Exception
 export function ExceptionsPage() {
   const [activeTab, setActiveTab] = React.useState<ExceptionType>("overpayment");
   const { data, isLoading, isError, error, refetch } = useExceptions();
+  const toast = useToast();
+
+  React.useEffect(() => {
+    if (isError) toast.error(error.message, "Failed to load exceptions");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isError, error?.message]);
 
   if (isLoading) {
     return (
@@ -280,10 +296,17 @@ export function ExceptionsPage() {
   if (isError) {
     return (
       <div className="p-8">
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400 flex items-center gap-3">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span><strong>Failed to load:</strong> {error.message}</span>
-          <button onClick={() => void refetch()} className="ml-auto underline cursor-pointer">Retry</button>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Exception Queue</h2>
+          <button type="button" onClick={() => void refetch()} className="btn-ghost text-xs gap-2 cursor-pointer">
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry
+          </button>
+        </div>
+        <div className="card-dark p-12 text-center">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-3" style={{ color: "rgba(239,68,68,0.4)" }} />
+          <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>Couldn't load exceptions</p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Check the notification for details.</p>
         </div>
       </div>
     );

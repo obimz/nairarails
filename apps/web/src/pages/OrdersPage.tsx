@@ -10,6 +10,7 @@ import {
 } from "../hooks/index.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { formatNaira } from "../lib/money.js";
+import { useToast } from "../contexts/ToastContext.js";
 
 type StatusFilter = OrderListItem["status"] | "all";
 
@@ -265,6 +266,7 @@ export function OrdersPage() {
   const [selectedRef,  setSelectedRef]  = React.useState<string | null>(null);
   const [dateFrom,     setDateFrom]     = React.useState("");
   const [dateTo,       setDateTo]       = React.useState("");
+  const toast = useToast();
 
   const statusArg = statusFilter === "all" ? undefined : statusFilter;
   const { data, isLoading, isError, error, refetch } = useOrders({
@@ -272,6 +274,11 @@ export function OrdersPage() {
     ...(dateFrom   ? { date_from: dateFrom } : {}),
     ...(dateTo     ? { date_to:   dateTo   } : {}),
   });
+
+  React.useEffect(() => {
+    if (isError) toast.error(error.message, "Failed to load orders");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isError, error?.message]);
 
   const orders = data?.results ?? [];
 
@@ -353,15 +360,6 @@ export function OrdersPage() {
         <div className="flex items-center justify-center gap-3 text-slate-500 text-sm py-16">
           <div className="w-4 h-4 border-2 border-slate-700 border-t-green-500 rounded-full animate-spin" />
           Loading orders…
-        </div>
-      )}
-
-      {/* Error */}
-      {isError && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400 flex items-center gap-3">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span><strong>Failed to load:</strong> {error.message}</span>
-          <button onClick={() => void refetch()} className="ml-auto underline">Retry</button>
         </div>
       )}
 

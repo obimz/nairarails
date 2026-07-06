@@ -6,18 +6,22 @@ import {
   CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from "recharts";
-import { RefreshCw, TrendingUp, Clock, AlertTriangle, CheckCircle } from "lucide-react";
+import {
+  RefreshCw, TrendingUp, Clock, AlertTriangle,
+  CheckCircle, TrendingDown, Layers,
+} from "lucide-react";
 import {
   useDashboard, useDailySeries,
   type DashboardRange, type DailySeriesRow,
 } from "../hooks/index.js";
 import { formatNaira, formatNairaCompact } from "../lib/money.js";
+import { useToast } from "../contexts/ToastContext.js";
 
 // ─── Range picker ─────────────────────────────────────────────────────────────
 
 const RANGE_OPTIONS: { value: DashboardRange; label: string }[] = [
-  { value: "7d",  label: "7 days"  },
-  { value: "30d", label: "30 days" },
+  { value: "7d",  label: "7d"       },
+  { value: "30d", label: "30d"      },
   { value: "all", label: "All time" },
 ];
 
@@ -30,21 +34,27 @@ function RangePicker({
 }) {
   return (
     <div
-      className="inline-flex"
-      style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}
+      className="inline-flex rounded-lg overflow-hidden"
+      style={{
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.10)",
+      }}
       role="group"
       aria-label="Time range"
     >
-      {RANGE_OPTIONS.map((opt) => (
+      {RANGE_OPTIONS.map((opt, i) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
-          className="px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer"
+          className="px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A97B]"
           style={{
-            background:  value === opt.value ? "rgba(22,169,123,0.15)" : "transparent",
-            color:       value === opt.value ? "#16A97B"               : "var(--text-muted)",
-            borderRight: opt.value !== "all"  ? "1px solid var(--border)" : "none",
+            background:  value === opt.value
+              ? "linear-gradient(135deg, rgba(22,169,123,0.25) 0%, rgba(22,169,123,0.12) 100%)"
+              : "transparent",
+            color:       value === opt.value ? "#16A97B" : "var(--text-muted)",
+            borderRight: i < RANGE_OPTIONS.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none",
+            textShadow:  value === opt.value ? "0 0 12px rgba(22,169,123,0.6)" : "none",
           }}
           aria-pressed={value === opt.value}
         >
@@ -58,42 +68,175 @@ function RangePicker({
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
 interface StatCardProps {
-  label:    string;
-  value:    string | number;
-  sub?:     string;
-  color?:   "green" | "amber" | "red" | "purple" | "default";
-  loading?: boolean;
-  icon?:    React.ReactNode;
+  label:     string;
+  value:     string | number;
+  sub?:      string | undefined;
+  trend?:    "up" | "down" | "neutral";
+  accent?:   string;   // CSS color for the glow + top bar
+  loading?:  boolean;
+  icon?:     React.ReactNode;
+  iconBg?:   string;
 }
 
-const COLOR_MAP = {
-  green:   "#22c55e",
-  amber:   "#f59e0b",
-  red:     "#ef4444",
-  purple:  "#a855f7",
-  default: "var(--text-primary)",
-};
-
-function StatCard({ label, value, sub, color = "default", loading, icon }: StatCardProps) {
+function StatCard({ label, value, sub, trend, accent = "#16A97B", loading, icon, iconBg }: StatCardProps) {
   return (
     <div
-      className="p-5 transition-shadow duration-200 hover:shadow-[0_0_0_1px_rgba(22,169,123,0.3)]"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+      className="relative overflow-hidden rounded-2xl p-5 transition-all duration-300 cursor-default group"
+      style={{
+        background: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
+        border:     "1px solid rgba(255,255,255,0.10)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        boxShadow:  "0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)",
+      }}
     >
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-          {label}
-        </p>
-        {icon && <div style={{ color: "var(--text-muted)" }}>{icon}</div>}
+      {/* Accent top bar */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px] transition-opacity duration-300"
+        style={{
+          background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+          opacity: 0.6,
+        }}
+      />
+      {/* Ambient glow on hover — via group hover using inline style trick */}
+      <div
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-2xl"
+        style={{ boxShadow: `inset 0 0 40px ${accent}0D` }}
+      />
+
+      <div className="relative z-10">
+        <div className="flex items-start justify-between mb-4">
+          <p
+            className="text-[10px] font-semibold uppercase tracking-widest"
+            style={{ color: "var(--text-muted)" }}
+          >
+            {label}
+          </p>
+          {icon && (
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: iconBg ?? `${accent}1A`, border: `1px solid ${accent}30` }}
+            >
+              <span style={{ color: accent }}>{icon}</span>
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="space-y-2">
+            <div className="h-8 w-32 rounded-lg animate-pulse" style={{ background: "rgba(255,255,255,0.07)" }} />
+            <div className="h-3 w-20 rounded animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} />
+          </div>
+        ) : (
+          <>
+            <p
+              className="text-2xl font-bold tabular-nums tracking-tight mb-1"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {value}
+            </p>
+            {sub && (
+              <div className="flex items-center gap-1.5">
+                {trend === "up"   && <TrendingUp   className="w-3 h-3 text-green-400" />}
+                {trend === "down" && <TrendingDown className="w-3 h-3 text-red-400" />}
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{sub}</p>
+              </div>
+            )}
+          </>
+        )}
       </div>
-      {loading ? (
-        <div className="h-8 w-28 rounded animate-pulse" style={{ background: "var(--bg-elevated)" }} />
-      ) : (
-        <p className="text-2xl font-bold tabular-nums" style={{ color: COLOR_MAP[color] }}>{value}</p>
-      )}
-      {sub && !loading && (
-        <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>{sub}</p>
-      )}
+    </div>
+  );
+}
+
+// ─── Chart panel wrapper ──────────────────────────────────────────────────────
+
+function ChartPanel({ title, subtitle, children }: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-5 overflow-hidden"
+      style={{
+        background: "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+        border:     "1px solid rgba(255,255,255,0.09)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        boxShadow:  "0 4px 24px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
+    >
+      <div className="mb-5">
+        <p className="text-sm font-semibold" style={{ color: "var(--text-secondary)" }}>{title}</p>
+        {subtitle && (
+          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{subtitle}</p>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── Collection rate bar ──────────────────────────────────────────────────────
+
+function CollectionBar({ rate, received, expected }: {
+  rate: number;
+  received: number;
+  expected: number;
+}) {
+  const color = rate >= 90 ? "#22c55e" : rate >= 50 ? "#f59e0b" : "#ef4444";
+  const glow  = rate >= 90
+    ? "0 0 12px rgba(34,197,94,0.5)"
+    : rate >= 50
+    ? "0 0 12px rgba(245,158,11,0.5)"
+    : "0 0 12px rgba(239,68,68,0.5)";
+
+  return (
+    <div
+      className="rounded-2xl p-5"
+      style={{
+        background: "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+        border:     "1px solid rgba(255,255,255,0.09)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        boxShadow:  "0 4px 24px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Layers className="w-4 h-4" style={{ color }} />
+          <p className="text-sm font-semibold" style={{ color: "var(--text-secondary)" }}>
+            Collection Rate
+          </p>
+        </div>
+        <p
+          className="text-xl font-bold tabular-nums"
+          style={{ color, textShadow: glow }}
+        >
+          {rate}%
+        </p>
+      </div>
+
+      {/* Track */}
+      <div
+        className="h-2 rounded-full overflow-hidden mb-3"
+        style={{ background: "rgba(255,255,255,0.08)" }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${Math.min(rate, 100)}%`,
+            background: `linear-gradient(90deg, ${color}80, ${color})`,
+            boxShadow: glow,
+          }}
+        />
+      </div>
+
+      <div className="flex justify-between text-xs" style={{ color: "var(--text-muted)" }}>
+        <span className="font-mono">{formatNaira(received)} received</span>
+        <span className="font-mono">{formatNaira(expected)} expected</span>
+      </div>
     </div>
   );
 }
@@ -107,10 +250,17 @@ function RevenueTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="px-3 py-2 text-xs shadow-xl"
-         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-      <p className="font-medium mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
-      <p className="font-mono">{formatNaira(payload[0]?.value ?? 0)}</p>
+    <div
+      className="px-3 py-2.5 text-xs rounded-xl shadow-2xl"
+      style={{
+        background: "rgba(15,23,42,0.92)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        backdropFilter: "blur(16px)",
+        color: "var(--text-primary)",
+      }}
+    >
+      <p className="mb-1.5 font-medium" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="font-mono font-semibold text-[#16A97B]">{formatNaira(payload[0]?.value ?? 0)}</p>
     </div>
   );
 }
@@ -122,25 +272,34 @@ function StatusTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="px-3 py-2 text-xs shadow-xl"
-         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-      <p className="font-medium mb-2" style={{ color: "var(--text-muted)" }}>{label}</p>
+    <div
+      className="px-3 py-2.5 text-xs rounded-xl shadow-2xl"
+      style={{
+        background: "rgba(15,23,42,0.92)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        backdropFilter: "blur(16px)",
+        color: "var(--text-primary)",
+      }}
+    >
+      <p className="mb-2 font-medium" style={{ color: "var(--text-muted)" }}>{label}</p>
       {payload.map((p) => (
         <div key={p.name} className="flex items-center gap-2 mb-0.5">
-          <span className="w-2 h-2 rounded-full inline-block" style={{ background: p.color }} />
-          <span style={{ color: "var(--text-secondary)" }}>{p.name}:</span>
-          <span className="font-mono font-medium">{p.value}</span>
+          <span className="w-2 h-2 rounded-sm inline-block shrink-0" style={{ background: p.color }} />
+          <span style={{ color: "var(--text-muted)" }}>{p.name}:</span>
+          <span className="font-mono font-semibold ml-auto pl-4">{p.value}</span>
         </div>
       ))}
     </div>
   );
 }
 
-// ─── Chart label formatter ────────────────────────────────────────────────────
+// ─── Chart formatters ─────────────────────────────────────────────────────────
 
-/** "2026-07-04" → "Jul 4" */
-function fmtDate(iso: string) {
+function fmtAxisDate(iso: string, range: "7d" | "30d") {
   const d = new Date(iso + "T00:00:00Z");
+  if (range === "7d") {
+    return d.toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
+  }
   return d.toLocaleDateString("en-GB", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
@@ -148,45 +307,62 @@ function fmtDate(iso: string) {
 
 function EmptyChart({ message }: { message: string }) {
   return (
-    <div className="h-52 flex flex-col items-center justify-center gap-2" style={{ color: "var(--text-muted)" }}>
+    <div
+      className="h-52 flex flex-col items-center justify-center gap-3 rounded-xl"
+      style={{
+        background: "rgba(255,255,255,0.02)",
+        border: "1px dashed rgba(255,255,255,0.08)",
+        color: "var(--text-muted)",
+      }}
+    >
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+        <line x1="18" y1="20" x2="18" y2="10"/>
+        <line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6"  y1="20" x2="6"  y2="14"/>
       </svg>
       <p className="text-xs">{message}</p>
     </div>
   );
 }
 
-// ─── Revenue area chart ───────────────────────────────────────────────────────
+// ─── Revenue chart ────────────────────────────────────────────────────────────
 
-function RevenueChart({ series }: { series: DailySeriesRow[] }) {
+function RevenueChart({ series, seriesRange }: { series: DailySeriesRow[]; seriesRange: "7d" | "30d" }) {
   const hasData = series.some((r) => r.total_received_kobo > 0);
-
   if (!hasData) return <EmptyChart message="No payments received in this period" />;
 
-  const data = series.map((r) => ({
-    date:  fmtDate(r.date),
-    kobo:  r.total_received_kobo,
-  }));
+  const data = series.map((r) => ({ date: fmtAxisDate(r.date, seriesRange), kobo: r.total_received_kobo }));
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+      <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="recvGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#16A97B" stopOpacity={0.30} />
-            <stop offset="100%" stopColor="#16A97B" stopOpacity={0.02} />
+            <stop offset="0%"   stopColor="#16A97B" stopOpacity={0.35} />
+            <stop offset="75%"  stopColor="#16A97B" stopOpacity={0.05} />
+            <stop offset="100%" stopColor="#16A97B" stopOpacity={0.00} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-        <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 10, fill: "var(--text-muted)", fontFamily: "inherit" }}
+          axisLine={false} tickLine={false}
+          interval={seriesRange === "30d" ? 4 : 0}
+        />
         <YAxis
           tickFormatter={(v: number) => formatNairaCompact(v)}
-          tick={{ fontSize: 10, fill: "var(--text-muted)" }}
-          axisLine={false} tickLine={false} width={60}
+          tick={{ fontSize: 10, fill: "var(--text-muted)", fontFamily: "inherit" }}
+          axisLine={false} tickLine={false} width={64}
         />
-        <Tooltip content={<RevenueTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
-        <Area type="monotone" dataKey="kobo" stroke="#16A97B" strokeWidth={2} fill="url(#recvGrad)" />
+        <Tooltip content={<RevenueTooltip />} cursor={{ stroke: "rgba(22,169,123,0.3)", strokeWidth: 1 }} />
+        <Area
+          type="monotone" dataKey="kobo"
+          stroke="#16A97B" strokeWidth={2}
+          fill="url(#recvGrad)"
+          dot={false}
+          activeDot={{ r: 4, fill: "#16A97B", stroke: "#0A0E14", strokeWidth: 2 }}
+        />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -194,13 +370,12 @@ function RevenueChart({ series }: { series: DailySeriesRow[] }) {
 
 // ─── Status bar chart ─────────────────────────────────────────────────────────
 
-function StatusChart({ series }: { series: DailySeriesRow[] }) {
+function StatusChart({ series, seriesRange }: { series: DailySeriesRow[]; seriesRange: "7d" | "30d" }) {
   const hasData = series.some((r) => r.paid + r.pending + r.underpayment + r.overpayment > 0);
-
   if (!hasData) return <EmptyChart message="No orders in this period" />;
 
   const data = series.map((r) => ({
-    date:         fmtDate(r.date),
+    date:         fmtAxisDate(r.date, seriesRange),
     Paid:         r.paid,
     Pending:      r.pending,
     Underpayment: r.underpayment,
@@ -209,18 +384,52 @@ function StatusChart({ series }: { series: DailySeriesRow[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%">
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-        <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-        <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} width={28} />
+      <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="35%">
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 10, fill: "var(--text-muted)", fontFamily: "inherit" }}
+          axisLine={false} tickLine={false}
+          interval={seriesRange === "30d" ? 4 : 0}
+        />
+        <YAxis
+          allowDecimals={false}
+          tick={{ fontSize: 10, fill: "var(--text-muted)", fontFamily: "inherit" }}
+          axisLine={false} tickLine={false} width={28}
+        />
         <Tooltip content={<StatusTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-        <Legend wrapperStyle={{ fontSize: "11px", color: "var(--text-muted)", paddingTop: "12px" }} />
-        <Bar dataKey="Paid"         stackId="a" fill="#22c55e" radius={0} />
-        <Bar dataKey="Pending"      stackId="a" fill="#f59e0b" radius={0} />
-        <Bar dataKey="Underpayment" stackId="a" fill="#ef4444" radius={0} />
-        <Bar dataKey="Overpayment"  stackId="a" fill="#a855f7" radius={[2,2,0,0]} />
+        <Legend
+          wrapperStyle={{ fontSize: "11px", paddingTop: "14px" }}
+          formatter={(val) => (
+            <span style={{ color: "var(--text-muted)" }}>{val}</span>
+          )}
+        />
+        <Bar dataKey="Paid"         stackId="s" fill="#22c55e" radius={0} />
+        <Bar dataKey="Pending"      stackId="s" fill="#f59e0b" radius={0} />
+        <Bar dataKey="Underpayment" stackId="s" fill="#ef4444" radius={0} />
+        <Bar dataKey="Overpayment"  stackId="s" fill="#a855f7" radius={[3,3,0,0]} />
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+// ─── Chart loading skeleton ───────────────────────────────────────────────────
+
+function ChartSkeleton() {
+  return (
+    <div className="h-52 flex items-end gap-1.5 px-2 pb-2">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex-1 rounded-sm animate-pulse"
+          style={{
+            height: `${25 + Math.random() * 60}%`,
+            background: "rgba(255,255,255,0.06)",
+            animationDelay: `${i * 60}ms`,
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -228,174 +437,164 @@ function StatusChart({ series }: { series: DailySeriesRow[] }) {
 
 export function OverviewPage() {
   const [range, setRange] = React.useState<DashboardRange>("7d");
-  // daily-series only supports 7d|30d — "all" falls back to 30d for the chart
-  const seriesRange = range === "all" ? "30d" : range;
+  const seriesRange: "7d" | "30d" = range === "all" ? "30d" : range;
+  const toast = useToast();
 
-  const { data, isLoading, isError, error, refetch }           = useDashboard(range);
-  const { data: seriesData, isLoading: seriesLoading }          = useDailySeries(seriesRange);
+  const { data, isLoading, isError, error, refetch }  = useDashboard(range);
+  const { data: seriesData, isLoading: seriesLoading } = useDailySeries(seriesRange);
+
+  // Fire a toast whenever the dashboard query errors
+  React.useEffect(() => {
+    if (isError) {
+      toast.error(error.message, "Dashboard unavailable");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isError, error?.message]);
 
   const collectionRate = data && data.total_expected_kobo > 0
     ? Math.round((data.total_received_kobo / data.total_expected_kobo) * 100)
     : 0;
 
-  const rateColor: StatCardProps["color"] =
-    collectionRate >= 90 ? "green" : collectionRate >= 50 ? "amber" : "red";
-
-  const rangeLabel = range === "7d" ? "Last 7 days" : range === "30d" ? "Last 30 days" : "All time";
+  const rangeLabel =
+    range === "7d"  ? "Last 7 days" :
+    range === "30d" ? "Last 30 days" : "All time";
 
   return (
-    <div className="p-6 md:p-8 max-w-6xl mx-auto">
+    <div
+      className="min-h-screen p-6 md:p-8"
+      style={{ background: "var(--bg-base)" }}
+    >
+      {/* Ambient background glow — purely decorative */}
+      <div
+        className="pointer-events-none fixed top-0 right-0 w-[600px] h-[400px] opacity-[0.04] blur-[120px]"
+        style={{ background: "radial-gradient(ellipse, #16A97B 0%, transparent 70%)" }}
+        aria-hidden
+      />
 
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div>
-          <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Overview</h2>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-            {rangeLabel}{data?.range_start ? ` · from ${data.range_start}` : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <RangePicker value={range} onChange={setRange} />
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            disabled={isLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
-            style={{ border: "1px solid var(--border)", color: "var(--text-muted)", background: "var(--bg-surface)" }}
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh
-          </button>
-        </div>
-      </div>
+      <div className="relative z-10 max-w-6xl mx-auto">
 
-      {/* Error banner */}
-      {isError && (
-        <div
-          className="flex items-center gap-3 p-4 text-sm mb-6"
-          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171" }}
-        >
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span><strong>Failed to load:</strong> {error.message}</span>
-          <button onClick={() => void refetch()} className="ml-auto underline text-xs cursor-pointer">
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard
-          label="Total Expected"
-          value={data ? formatNairaCompact(data.total_expected_kobo) : "—"}
-          sub={data ? formatNaira(data.total_expected_kobo) : undefined}
-          icon={<TrendingUp className="w-4 h-4" />}
-          loading={isLoading}
-        />
-        <StatCard
-          label="Total Received"
-          value={data ? formatNairaCompact(data.total_received_kobo) : "—"}
-          sub={data ? `${collectionRate}% collection rate` : undefined}
-          color={rateColor}
-          loading={isLoading}
-        />
-        <StatCard
-          label="Open Exceptions"
-          value={data?.exceptions_open ?? "—"}
-          sub="underpayment · overpayment · unmatched"
-          color={data && data.exceptions_open > 0 ? "red" : "default"}
-          icon={<AlertTriangle className="w-4 h-4" />}
-          loading={isLoading}
-        />
-        <StatCard
-          label="Paid"
-          value={data?.orders_paid ?? "—"}
-          color="green"
-          icon={<CheckCircle className="w-4 h-4" />}
-          loading={isLoading}
-        />
-        <StatCard
-          label="Pending"
-          value={data?.orders_pending ?? "—"}
-          color="amber"
-          icon={<Clock className="w-4 h-4" />}
-          loading={isLoading}
-        />
-        <StatCard
-          label="Underpayments"
-          value={data?.orders_underpayment ?? "—"}
-          color={data && data.orders_underpayment > 0 ? "red" : "default"}
-          loading={isLoading}
-        />
-      </div>
-
-      {/* Collection rate bar */}
-      {data && data.total_expected_kobo > 0 && (
-        <div
-          className="p-5 mb-6"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>Collection Rate</p>
-            <p className="text-sm font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>
-              {collectionRate}%
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
+              Overview
+            </h1>
+            <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+              {rangeLabel}
+              {data?.range_start && range !== "all"
+                ? <span className="ml-1 font-mono text-xs">· from {data.range_start}</span>
+                : null}
             </p>
           </div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
-            <div
-              className="h-full rounded-full transition-all duration-700"
+
+          <div className="flex items-center gap-3">
+            <RangePicker value={range} onChange={setRange} />
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A97B]"
               style={{
-                width: `${Math.min(collectionRate, 100)}%`,
-                backgroundColor: collectionRate >= 90 ? "#22c55e" : collectionRate >= 50 ? "#f59e0b" : "#ef4444",
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                color: "var(--text-muted)",
               }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.09)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* ── Stat cards grid ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <StatCard
+            label="Total Expected"
+            value={data ? formatNairaCompact(data.total_expected_kobo) : "—"}
+            sub={data ? formatNaira(data.total_expected_kobo) : undefined}
+            icon={<TrendingUp className="w-4 h-4" />}
+            accent="#16A97B"
+            loading={isLoading}
+          />
+          <StatCard
+            label="Total Received"
+            value={data ? formatNairaCompact(data.total_received_kobo) : "—"}
+            sub={data ? `${collectionRate}% collection rate` : undefined}
+            trend={collectionRate >= 90 ? "up" : collectionRate < 50 ? "down" : "neutral"}
+            accent={collectionRate >= 90 ? "#22c55e" : collectionRate >= 50 ? "#f59e0b" : "#ef4444"}
+            icon={<TrendingUp className="w-4 h-4" />}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Open Exceptions"
+            value={data?.exceptions_open ?? "—"}
+            sub="need attention"
+            accent={data && data.exceptions_open > 0 ? "#ef4444" : "#64748b"}
+            icon={<AlertTriangle className="w-4 h-4" />}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Paid"
+            value={data?.orders_paid ?? "—"}
+            sub={rangeLabel.toLowerCase()}
+            accent="#22c55e"
+            icon={<CheckCircle className="w-4 h-4" />}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Pending"
+            value={data?.orders_pending ?? "—"}
+            sub="awaiting payment"
+            accent="#f59e0b"
+            icon={<Clock className="w-4 h-4" />}
+            loading={isLoading}
+          />
+          <StatCard
+            label="Underpayments"
+            value={data?.orders_underpayment ?? "—"}
+            sub="shortfall held"
+            accent={data && data.orders_underpayment > 0 ? "#ef4444" : "#64748b"}
+            icon={<TrendingDown className="w-4 h-4" />}
+            loading={isLoading}
+          />
+        </div>
+
+        {/* ── Collection rate bar ──────────────────────────────────────────── */}
+        {(data && data.total_expected_kobo > 0) && (
+          <div className="mb-4">
+            <CollectionBar
+              rate={collectionRate}
+              received={data.total_received_kobo}
+              expected={data.total_expected_kobo}
             />
           </div>
-          <div className="flex justify-between mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-            <span>{formatNaira(data.total_received_kobo)} received</span>
-            <span>{formatNaira(data.total_expected_kobo)} expected</span>
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Charts — two side by side on md+, stacked on mobile */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* ── Charts ───────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ChartPanel
+            title="Revenue received"
+            subtitle={seriesRange === "7d" ? "Last 7 days · daily" : "Last 30 days · daily"}
+          >
+            {seriesLoading
+              ? <ChartSkeleton />
+              : seriesData
+              ? <RevenueChart series={seriesData.series} seriesRange={seriesRange} />
+              : <EmptyChart message="No data" />}
+          </ChartPanel>
 
-        {/* Revenue over time */}
-        <div
-          className="p-5"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-        >
-          <p className="text-sm font-semibold mb-5" style={{ color: "var(--text-secondary)" }}>
-            Revenue received · {seriesRange === "7d" ? "7 days" : "30 days"}
-          </p>
-          {seriesLoading ? (
-            <div className="h-52 flex items-center justify-center">
-              <div className="w-5 h-5 border-2 border-slate-700 border-t-[#16A97B] rounded-full animate-spin" />
-            </div>
-          ) : seriesData ? (
-            <RevenueChart series={seriesData.series} />
-          ) : (
-            <EmptyChart message="No data" />
-          )}
-        </div>
-
-        {/* Orders by status over time */}
-        <div
-          className="p-5"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-        >
-          <p className="text-sm font-semibold mb-5" style={{ color: "var(--text-secondary)" }}>
-            Orders by status · {seriesRange === "7d" ? "7 days" : "30 days"}
-          </p>
-          {seriesLoading ? (
-            <div className="h-52 flex items-center justify-center">
-              <div className="w-5 h-5 border-2 border-slate-700 border-t-[#16A97B] rounded-full animate-spin" />
-            </div>
-          ) : seriesData ? (
-            <StatusChart series={seriesData.series} />
-          ) : (
-            <EmptyChart message="No data" />
-          )}
+          <ChartPanel
+            title="Orders by status"
+            subtitle={seriesRange === "7d" ? "Last 7 days · stacked" : "Last 30 days · stacked"}
+          >
+            {seriesLoading
+              ? <ChartSkeleton />
+              : seriesData
+              ? <StatusChart series={seriesData.series} seriesRange={seriesRange} />
+              : <EmptyChart message="No data" />}
+          </ChartPanel>
         </div>
 
       </div>
