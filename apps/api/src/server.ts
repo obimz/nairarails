@@ -67,11 +67,18 @@ app.use("/", healthRouter);
 app.use("/api/v1", authRouter);
 app.use("/api/v1", keysRouter);
 app.use("/api/v1", webhookRouter);
+app.use("/api/v1", merchantRouter);
+
+// Admin routes use x-admin-secret — must be mounted BEFORE the routers that
+// apply router.use(authAny), because those routers match /api/v1/* broadly
+// and will intercept /api/v1/admin/* with an API-key 401 before the admin
+// router is ever reached.
+app.use("/api/v1/admin", adminRouter);
+
+// Merchant-scoped routes — all protected by authAny (x-api-key or Bearer JWT)
 app.use("/api/v1", orderRouter);
 app.use("/api/v1", exceptionRouter);
 app.use("/api/v1", dashboardRouter);
-app.use("/api/v1", adminRouter);
-app.use("/api/v1/merchants", merchantRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((req, res) => {

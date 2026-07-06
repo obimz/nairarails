@@ -76,6 +76,13 @@ model Merchant {
   /// Webhook secret for signing outbound payloads — generated on signup, rotatable via settings
   webhookSecret String?  @map("webhook_secret")
 
+  /// True when an admin has suspended this merchant — all API key auth fails while suspended
+  suspended     Boolean  @default(false) @map("suspended")
+  /// ISO timestamp when the merchant was suspended, null if not suspended
+  suspendedAt   DateTime? @map("suspended_at")
+  /// Admin note explaining why the merchant was suspended
+  suspendedNote String?  @map("suspended_note")
+
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
