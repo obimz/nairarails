@@ -18,7 +18,7 @@ export interface OrderListItem {
   customer_name:          string;
   expected_amount_kobo:   number;
   received_amount_kobo:   number | null;
-  status:                 "pending" | "paid" | "underpayment" | "overpayment" | "unmatched";
+  status:                 "pending" | "paid" | "underpayment" | "overpayment" | "unmatched" | "refunded" | "expired";
   virtual_account_number: string;
   created_at:             string;
 }
@@ -108,11 +108,15 @@ export const QUERY_KEYS = {
 } as const;
 
 // ─── useOrders ───────────────────────────────────────────────────────────────
-export function useOrders(status?: string) {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+export function useOrders(filters?: { status?: string; date_from?: string; date_to?: string }) {
+  const qs = new URLSearchParams();
+  if (filters?.status)    qs.set("status",    filters.status);
+  if (filters?.date_from) qs.set("date_from", filters.date_from);
+  if (filters?.date_to)   qs.set("date_to",   filters.date_to);
+  const query = qs.toString();
   return useQuery<OrderListResponse>({
-    queryKey: QUERY_KEYS.orders(status),
-    queryFn:  () => apiGet<OrderListResponse>(`/api/v1/orders${qs}`),
+    queryKey: ["orders", filters],
+    queryFn:  () => apiGet<OrderListResponse>(`/api/v1/orders${query ? `?${query}` : ""}`),
   });
 }
 
@@ -153,6 +157,20 @@ export function useRefundExcess() {
       apiPost<RefundExcessResponse>(`/api/v1/exceptions/${encodeURIComponent(orderRef)}/refund-excess`),
     onSuccess: () => {
       // Invalidate everything that could reflect the resolved exception
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptions() });
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.orders() });
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.dashboard() });
+    },
+  });
+}
+
+// ─── useRefundShortfall ──────────────────────────────────────────────────────
+export function useRefundShortfall() {
+  const qc = useQueryClient();
+  return useMutation<RefundExcessResponse, Error, string>({
+    mutationFn: (orderRef: string) =>
+      apiPost<RefundExcessResponse>(`/api/v1/exceptions/${encodeURIComponent(orderRef)}/refund-shortfall`),
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptions() });
       void qc.invalidateQueries({ queryKey: QUERY_KEYS.orders() });
       void qc.invalidateQueries({ queryKey: QUERY_KEYS.dashboard() });

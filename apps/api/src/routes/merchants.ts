@@ -151,6 +151,16 @@ router.post("/webhook-secret/rotate", jwtAuth, async (_req, res, next) => {
 
     logger.info({ merchantId: merchant.id }, "Webhook secret rotated");
 
+    const merchant = res.locals.merchant;
+
+    const updated = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        ...(name       !== undefined ? { name }                     : {}),
+        ...(webhookUrl !== undefined ? { webhookUrl: webhookUrl ?? null } : {}),
+      },
+    });
+
     res.status(200).json({
       webhookSecret: newSecret,
       message: "Webhook secret rotated. Update your signature verification logic immediately — the old secret is now invalid.",

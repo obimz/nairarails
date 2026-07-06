@@ -9,3 +9,4 @@ export * from "./merchant.js";
 export * from "./reconciliation.js";
 export * from "./webhook.js";
 export * from "./errors.js";
+export * from "./merchant.js";

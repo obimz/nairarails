@@ -12,11 +12,12 @@
 
 import { logger } from "../lib/logger.js";
 
-const BASE_URL    = process.env["NOMBA_BASE_URL"]    ?? "https://sandbox.api.nomba.com/v1";
-const V2_BASE_URL = BASE_URL.replace("/v1", "/v2");
-const ACCOUNT_ID  = process.env["NOMBA_ACCOUNT_ID"]  ?? "";
-const CLIENT_ID   = process.env["NOMBA_CLIENT_ID"]   ?? "";
-const CLIENT_SECRET = process.env["NOMBA_CLIENT_SECRET"] ?? "";
+const BASE_URL      = process.env["NOMBA_BASE_URL"]        ?? "https://sandbox.api.nomba.com/v1";
+const V2_BASE_URL   = BASE_URL.replace("/v1", "/v2");
+const ACCOUNT_ID    = process.env["NOMBA_ACCOUNT_ID"]      ?? "";
+const SUB_ACCOUNT_ID = process.env["NOMBA_SUB_ACCOUNT_ID"] ?? "";
+const CLIENT_ID     = process.env["NOMBA_CLIENT_ID"]       ?? "";
+const CLIENT_SECRET = process.env["NOMBA_CLIENT_SECRET"]   ?? "";
 
 // ─── Typed error ──────────────────────────────────────────────────────────────
 export class NombaApiError extends Error {
@@ -37,11 +38,13 @@ let tokenExpiresAt: number = 0; // unix ms — refresh when within 5 min of expi
 // ─── Shared request helper ────────────────────────────────────────────────────
 // Wraps fetch with auth headers, JSON parsing, and structured error logging.
 // Throws a descriptive Error on any non-2xx response so callers can catch + surface it.
+// Pass `baseUrl` to override the default BASE_URL (e.g. BASE_URL_V2 for transfers).
 async function nombaRequest<T>(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body?: Record<string, unknown>,
-  skipAuth = false
+  skipAuth = false,
+  baseUrl = BASE_URL
 ): Promise<T> {
   const token = skipAuth ? null : await getAccessToken();
 
@@ -58,7 +61,7 @@ async function nombaRequest<T>(
     fetchInit.body = JSON.stringify(body);
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, fetchInit);
+  const res = await fetch(`${baseUrl}${path}`, fetchInit);
 
   const json = await res.json() as Record<string, unknown>;
 
@@ -156,6 +159,7 @@ function extractVAFields(response: Record<string, unknown>): CreateVirtualAccoun
 /**
  * Create a virtual account (NUBAN) for a single order.
  * POST /accounts/virtual
+ * POST /accounts/virtual/{subAccountId}
  *
  * accountRef = order_ref so aliasAccountReference in the webhook maps back
  * to the order with no secondary lookup.
@@ -170,16 +174,29 @@ export async function createVirtualAccount(
 ): Promise<CreateVirtualAccountResult> {
   const { accountRef, accountName, expectedAmountKobo, expiryDate } = params;
 
+  if (!SUB_ACCOUNT_ID) {
+    throw new Error(
+      "createVirtualAccount: NOMBA_SUB_ACCOUNT_ID is not set. " +
+      "Virtual account webhooks will not fire without it. " +
+      "Add NOMBA_SUB_ACCOUNT_ID to your .env file."
+    );
+  }
+
   logger.info({ accountRef, accountName, expectedAmountKobo }, "Creating Nomba virtual account");
 
   type VAResponse = { data: Record<string, unknown> };
 
-  const response = await nombaRequest<VAResponse>("POST", "/accounts/virtual", {
-    accountRef,
-    accountName,
-    amount: expectedAmountKobo,
-    ...(expiryDate ? { expiryDate } : {}),
-  });
+  // Path includes the subAccountId — this is what makes Nomba fire webhooks.
+  const response = await nombaRequest<VAResponse>(
+    "POST",
+    `/accounts/virtual/${SUB_ACCOUNT_ID}`,
+    {
+      accountRef,
+      accountName,
+      amount: expectedAmountKobo,
+      ...(expiryDate ? { expiryDate } : {}),
+    }
+  );
 
   const result = extractVAFields(response as Record<string, unknown>);
 
@@ -189,6 +206,53 @@ export async function createVirtualAccount(
 
   logger.info({ accountRef, accountNumber: result.accountNumber }, "Virtual account created");
   return result;
+}
+
+/**
+ * Expire a virtual account on Nomba's side.
+ * DELETE /v1/accounts/virtual/{identifier}
+ *
+ * identifier = the accountRef used when creating the VA (i.e. our order_ref).
+ * Returns { expired: true } on success.
+ * Call this whenever we mark an order expired or nuke it locally so Nomba's
+ * side stays in sync and the VA stops accepting payments.
+ */
+export async function expireVirtualAccount(accountRef: string): Promise<void> {
+  logger.info({ accountRef }, "Expiring Nomba virtual account");
+
+  type ExpireResponse = { data: { expired: boolean } };
+
+  const response = await nombaRequest<ExpireResponse>(
+    "DELETE",
+    `/accounts/virtual/${encodeURIComponent(accountRef)}`
+  );
+
+  if (!response.data.expired) {
+    throw new Error(`expireVirtualAccount: Nomba did not confirm expiry for ref ${accountRef}`);
+  }
+
+  logger.info({ accountRef }, "Nomba virtual account expired");
+}
+
+// ─── Bank Codes ───────────────────────────────────────────────────────────────
+
+export interface NombaBank {
+  code: string;
+  name: string;
+}
+
+/**
+ * Fetch all supported bank codes from Nomba.
+ * GET /v1/transfers/banks
+ *
+ * Call once and cache — bank codes rarely change.
+ * Use the returned `code` as `bankCode` in lookup and transfer requests.
+ */
+export async function fetchBankCodes(): Promise<NombaBank[]> {
+  type BanksResponse = { data: { code: string; name: string }[] };
+
+  const response = await nombaRequest<BanksResponse>("GET", "/transfers/banks");
+  return response.data.map((b) => ({ code: b.code, name: b.name }));
 }
 
 // ─── Transfers ────────────────────────────────────────────────────────────────
@@ -345,7 +409,10 @@ export interface ListTransactionsResult {
 
 /**
  * List transactions from Nomba for a date range.
- * GET /transactions?dateFrom=&dateTo=&status=success
+ * GET /v1/transactions/accounts/{subAccountId}
+ *
+ * Correct v1 path per Nomba API reference — scoped to the sub-account.
+ * Authorization header carries parent accountId.
  *
  * Used by the reconciliation backstop to diff Nomba's view against
  * the local ledger_entries table. Reconcile by merchantTxRef — that's
@@ -375,7 +442,10 @@ export async function listTransactions(
     };
   };
 
-  const response = await nombaRequest<TxResponse>("GET", `/transactions?${qs.toString()}`);
+  const response = await nombaRequest<TxResponse>(
+    "GET",
+    `/transactions/accounts/${SUB_ACCOUNT_ID}?${qs.toString()}`
+  );
   const d = response.data;
 
   // Nomba may return the list under `transactions` or `records`.
