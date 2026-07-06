@@ -65,9 +65,13 @@ export function AuthCallbackPage() {
       }
 
       if (cancelled) return;
-      // Step 3 — send to Settings so they see and can copy their key
+      // Step 3 — redirect to overview; pass raw key in route state so the
+      // dashboard can show it in a one-time copy modal without ever re-fetching it.
       setMessage("All set! Taking you to your dashboard…");
-      navigate("/dashboard/settings", { replace: true });
+      navigate("/dashboard/overview", {
+        replace: true,
+        state:   { newApiKey: localStorage.getItem("nairarails_api_key") ?? null },
+      });
     }
 
     run();

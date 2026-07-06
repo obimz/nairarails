@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
 import {
   AreaChart, Area,
   BarChart, Bar,
@@ -8,7 +9,7 @@ import {
 } from "recharts";
 import {
   RefreshCw, TrendingUp, Clock, AlertTriangle,
-  CheckCircle, TrendingDown, Layers,
+  CheckCircle, TrendingDown, Layers, Copy, Check, Key, X,
 } from "lucide-react";
 import {
   useDashboard, useDailySeries,
@@ -433,11 +434,134 @@ function ChartSkeleton() {
   );
 }
 
+// ─── ApiKeyModal ──────────────────────────────────────────────────────────────
+// Shown once when a merchant lands on the dashboard after email verification.
+// The raw API key is passed via React Router location.state.newApiKey — it
+// is never fetched again. Dismissing the modal clears it from state.
+
+function ApiKeyModal({ apiKey, onClose }: { apiKey: string; onClose: () => void }) {
+  const [copied, setCopied] = React.useState(false);
+
+  function copy() {
+    void navigator.clipboard.writeText(apiKey).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
+    >
+      <div
+        className="relative w-full max-w-md rounded-2xl shadow-2xl"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+      >
+        {/* Top accent bar */}
+        <div
+          className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
+          style={{ background: "linear-gradient(90deg, transparent, #16A97B, transparent)" }}
+        />
+
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(22,169,123,0.12)", border: "1px solid rgba(22,169,123,0.25)" }}
+              >
+                <Key className="w-5 h-5" style={{ color: "#16A97B" }} />
+              </div>
+              <div>
+                <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Your API Key</p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  Copy it now — it won't be shown again
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-7 h-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70 cursor-pointer"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
+              aria-label="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Warning */}
+          <div
+            className="flex items-start gap-2.5 rounded-xl px-3 py-2.5 mb-4 text-xs"
+            style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b" }}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>Store this in your environment variables. We hash it immediately and cannot recover it.</span>
+          </div>
+
+          {/* Key display */}
+          <div
+            className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4"
+            style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}
+          >
+            <code
+              className="flex-1 text-xs font-mono break-all select-all"
+              style={{ color: "#16A97B" }}
+            >
+              {apiKey}
+            </code>
+            <button
+              type="button"
+              onClick={copy}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+              style={{
+                background:  copied ? "rgba(22,169,123,0.20)" : "rgba(22,169,123,0.12)",
+                border:      "1px solid rgba(22,169,123,0.30)",
+                color:       "#16A97B",
+              }}
+            >
+              {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+
+          {/* Dismiss */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+          >
+            I've saved my key — continue to dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
+  const location = useLocation();
   const [range, setRange] = React.useState<DashboardRange>("7d");
   const seriesRange: "7d" | "30d" = range === "all" ? "30d" : range;
+
+  // Pick up the raw API key passed via route state from AuthCallbackPage.
+  // Replace the state immediately so a manual refresh doesn't re-show the modal.
+  const [newApiKey, setNewApiKey] = React.useState<string | null>(() => {
+    const state = location.state as { newApiKey?: string } | null;
+    return state?.newApiKey ?? null;
+  });
+
+  React.useEffect(() => {
+    if (newApiKey) {
+      // Clear the state from the history entry so a back/forward nav won't re-show it.
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [newApiKey]);
   const toast = useToast();
 
   const { data, isLoading, isError, error, refetch }  = useDashboard(range);
@@ -464,6 +588,11 @@ export function OverviewPage() {
       className="min-h-screen p-6 md:p-8"
       style={{ background: "var(--bg-base)" }}
     >
+      {/* API key reveal modal — shown once after email verification */}
+      {newApiKey && (
+        <ApiKeyModal apiKey={newApiKey} onClose={() => setNewApiKey(null)} />
+      )}
+
       {/* Ambient background glow — purely decorative */}
       <div
         className="pointer-events-none fixed top-0 right-0 w-[600px] h-[400px] opacity-[0.04] blur-[120px]"

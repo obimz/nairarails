@@ -124,14 +124,21 @@ function StatusPill({ status }: { status: string }) {
 function ResultBox({ result }: { result: PanelResult | null }) {
   if (!result) return null;
   return (
-    <div className={`mt-4 rounded-xl p-4 text-xs font-mono whitespace-pre-wrap break-all border`}
-         style={{
-           background: result.ok ? "rgba(22,169,123,0.07)" : "rgba(239,68,68,0.07)",
-           borderColor: result.ok ? "rgba(22,169,123,0.25)" : "rgba(239,68,68,0.25)",
-           color: result.ok ? "#86efac" : "#fca5a5",
-         }}>
-      <div className="flex items-center gap-1.5 mb-2 font-sans font-semibold text-[11px]"
-           style={{ color: result.ok ? "#22c55e" : "#ef4444" }}>
+    <div
+      className="mt-4 rounded-xl p-4 text-xs font-mono whitespace-pre-wrap break-all"
+      style={{
+        background: result.ok
+          ? "linear-gradient(135deg, rgba(22,169,123,0.08) 0%, rgba(22,169,123,0.04) 100%)"
+          : "linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.04) 100%)",
+        border: `1px solid ${result.ok ? "rgba(22,169,123,0.25)" : "rgba(239,68,68,0.25)"}`,
+        boxShadow: `inset 0 1px 0 ${result.ok ? "rgba(22,169,123,0.08)" : "rgba(239,68,68,0.08)"}`,
+        color: result.ok ? "#86efac" : "#fca5a5",
+      }}
+    >
+      <div
+        className="flex items-center gap-1.5 mb-2 font-sans font-semibold text-[11px]"
+        style={{ color: result.ok ? "#22c55e" : "#ef4444" }}
+      >
         {result.ok
           ? <CheckCircle2 className="w-3.5 h-3.5" />
           : <XCircle className="w-3.5 h-3.5" />}
@@ -159,7 +166,7 @@ function FieldInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={`w-full rounded-lg px-3 py-2 text-sm outline-none transition-all ${mono ? "font-mono" : ""}`}
-        style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+        style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}
         onFocus={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
         onBlur={(e)  => (e.currentTarget.style.borderColor = "var(--border)")}
       />
@@ -201,9 +208,16 @@ function SectionHeader({ title, subtitle, action }: {
 }) {
   return (
     <div className="flex items-start justify-between mb-5">
-      <div>
-        <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
-        {subtitle && <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{subtitle}</p>}
+      <div className="flex items-start gap-3">
+        {/* Left accent bar */}
+        <div
+          className="w-0.5 h-6 rounded-full mt-0.5 shrink-0"
+          style={{ background: "linear-gradient(180deg, #16A97B, rgba(22,169,123,0.2))", boxShadow: "0 0 6px rgba(22,169,123,0.4)" }}
+        />
+        <div>
+          <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{title}</h2>
+          {subtitle && <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{subtitle}</p>}
+        </div>
       </div>
       {action}
     </div>
@@ -212,12 +226,34 @@ function SectionHeader({ title, subtitle, action }: {
 
 function StatTile({ label, value, accent }: { label: string; value: string | number; accent?: string | undefined }) {
   return (
-    <div className="rounded-xl p-4"
-         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-      <p className="text-[10px] font-semibold uppercase tracking-widest mb-2"
-         style={{ color: "var(--text-muted)" }}>{label}</p>
-      <p className="text-2xl font-bold tabular-nums"
-         style={{ color: accent ?? "var(--text-primary)" }}>{value}</p>
+    <div
+      className="rounded-xl p-4 relative overflow-hidden"
+      style={{
+        background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+      }}
+    >
+      {/* Subtle accent glow in corner */}
+      {accent && (
+        <div
+          className="absolute top-0 right-0 w-16 h-16 opacity-10 blur-2xl pointer-events-none"
+          style={{ background: accent }}
+          aria-hidden
+        />
+      )}
+      <p
+        className="text-[10px] font-semibold uppercase tracking-widest mb-2 relative z-10"
+        style={{ color: "rgba(100,116,139,0.8)" }}
+      >
+        {label}
+      </p>
+      <p
+        className="text-2xl font-bold tabular-nums relative z-10"
+        style={{ color: accent ?? "var(--text-primary)" }}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -251,7 +287,7 @@ function ConfirmModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
       <div className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl"
-           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+           style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
         <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
              style={{ background: `linear-gradient(90deg, transparent, ${danger ? "#ef4444" : "#16A97B"}, transparent)` }} />
         <div className="flex items-start gap-3 mb-4">
@@ -269,7 +305,7 @@ function ConfirmModal({
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={onCancel}
             className="px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
-            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-secondary)" }}>
             Cancel
           </button>
           <button type="button" onClick={onConfirm} disabled={loading}
@@ -310,17 +346,17 @@ function Drawer({ open, onClose, title, subtitle, children }: {
            onClick={onClose} />
       {/* Panel */}
       <div className="absolute right-0 top-0 bottom-0 w-full max-w-2xl flex flex-col shadow-2xl"
-           style={{ background: "var(--bg-surface)", borderLeft: "1px solid var(--border)" }}>
+           style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-4"
-             style={{ borderBottom: "1px solid var(--border)" }}>
+             style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div>
             <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{title}</p>
             {subtitle && <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{subtitle}</p>}
           </div>
           <button type="button" onClick={onClose}
             className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:opacity-70"
-            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-muted)" }}>
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -363,7 +399,7 @@ function AdminLogin({ onAuth }: { onAuth: (secret: string) => void }) {
            style={{ background: "radial-gradient(ellipse at 50% 30%, #16A97B, transparent 70%)" }} aria-hidden />
 
       <div className="relative w-full max-w-sm rounded-2xl p-8 shadow-2xl"
-           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+           style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
         {/* Top accent bar */}
         <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
              style={{ background: "linear-gradient(90deg, transparent, #16A97B, transparent)" }} />
@@ -496,10 +532,10 @@ function OverviewSection({ secret }: { secret: string }) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest mb-3"
              style={{ color: "var(--text-muted)" }}>Recent Orders</p>
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
             <table className="w-full text-xs">
               <thead>
-                <tr style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
+                <tr style={{ background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   {["Order Ref", "Merchant", "Expected", "Status", "Date"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left font-semibold uppercase tracking-wide"
                         style={{ color: "var(--text-muted)" }}>{h}</th>
@@ -508,7 +544,7 @@ function OverviewSection({ secret }: { secret: string }) {
               </thead>
               <tbody>
                 {orders.slice(0, 8).map((o) => (
-                  <tr key={o.order_ref} style={{ borderTop: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+                  <tr key={o.order_ref} style={{ borderTop: "1px solid rgba(255,255,255,0.08)", background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)" }}>
                     <td className="px-3 py-2 font-mono" style={{ color: "var(--text-primary)" }}>{o.order_ref}</td>
                     <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{o.merchant_name}</td>
                     <td className="px-3 py-2 font-mono tabular-nums" style={{ color: "var(--text-secondary)" }}>{formatNaira(o.expected_amount_kobo)}</td>
@@ -613,7 +649,7 @@ function MerchantsSection({ secret }: { secret: string }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
              style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
           <div className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl"
-               style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+               style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
             <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
                  style={{ background: "linear-gradient(90deg, transparent, #16A97B, transparent)" }} />
             <p className="font-semibold text-sm mb-4" style={{ color: "var(--text-primary)" }}>
@@ -627,7 +663,7 @@ function MerchantsSection({ secret }: { secret: string }) {
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setEditModal(null)}
                 className="px-4 py-2 rounded-lg text-xs font-semibold"
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-secondary)" }}>
                 Cancel
               </button>
               <button type="button"
@@ -673,7 +709,7 @@ function MerchantsSection({ secret }: { secret: string }) {
           value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name or email…"
           className="w-full rounded-lg pl-9 pr-3 py-2 text-sm outline-none transition-all"
-          style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+          style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}
           onFocus={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
           onBlur={(e)  => (e.currentTarget.style.borderColor = "var(--border)")}
         />
@@ -691,7 +727,7 @@ function MerchantsSection({ secret }: { secret: string }) {
           {filtered.map((m) => (
             <div key={m.id} className="rounded-xl p-4"
                  style={{
-                   background: "var(--bg-surface)",
+                   background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
                    border: `1px solid ${m.suspended ? "rgba(239,68,68,0.35)" : "var(--border)"}`,
                  }}>
               {/* Header row */}
@@ -732,7 +768,7 @@ function MerchantsSection({ secret }: { secret: string }) {
                   { label: "Issues", value: m.orders_exception, color: m.orders_exception > 0 ? "#ef4444" : undefined },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="rounded-lg px-3 py-2 text-center"
-                       style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                       style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <p className="text-[10px] font-medium uppercase tracking-wider mb-0.5" style={{ color: "var(--text-muted)" }}>{label}</p>
                     <p className="text-lg font-bold tabular-nums" style={{ color: color ?? "var(--text-primary)" }}>{value}</p>
                   </div>
@@ -755,7 +791,7 @@ function MerchantsSection({ secret }: { secret: string }) {
               </div>
 
               {/* Action buttons */}
-              <div className="flex flex-wrap gap-2 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="flex flex-wrap gap-2 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 {/* Suspend / Reactivate */}
                 {!m.suspended ? (
                   <ActionBtn small danger onClick={() => { setSuspendNote(""); setSuspendModal({ id: m.id, name: m.name }); }}
@@ -943,7 +979,7 @@ function OrdersSection({ secret }: { secret: string }) {
 
             {/* Detail fields */}
             <div className="rounded-xl p-4 space-y-2.5 text-xs"
-                 style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                 style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
               {[
                 ["Status",          <StatusPill status={detail.status} key="s" />],
                 ["Customer",        detail.customer_name],
@@ -964,7 +1000,7 @@ function OrdersSection({ secret }: { secret: string }) {
 
             {/* Force pay action */}
             {!["paid", "refunded"].includes(detail.status) && (
-              <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+              <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
                 <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>Admin Actions</p>
                 <ActionBtn onClick={() => { setForcePayAmount(String(detail.expected_amount_kobo)); setForcePayModal(true); }}>
                   <ChevronsRight className="w-3.5 h-3.5" /> Force Mark Paid
@@ -981,7 +1017,7 @@ function OrdersSection({ secret }: { secret: string }) {
                 <div className="space-y-2">
                   {detail.splits.map((s, i) => (
                     <div key={i} className="rounded-lg px-3 py-2.5 flex items-center justify-between text-xs"
-                         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                         style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                       <div>
                         <p className="font-semibold" style={{ color: "var(--text-primary)" }}>{s.party}</p>
                         <p className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>{s.account_number} · {s.bank_code}</p>
@@ -1006,7 +1042,7 @@ function OrdersSection({ secret }: { secret: string }) {
                 <div className="space-y-1.5">
                   {detail.ledger_entries.map((e) => (
                     <div key={e.id} className="rounded-lg px-3 py-2 flex items-center gap-3 text-xs"
-                         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                         style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                       <span className="w-2 h-2 rounded-full shrink-0"
                             style={{ background: ENTRY_TYPE_COLORS[e.entry_type] ?? "#94a3b8" }} />
                       <div className="flex-1 min-w-0">
@@ -1038,10 +1074,10 @@ function OrdersSection({ secret }: { secret: string }) {
                 <div className="space-y-1.5">
                   {detail.webhook_events.map((e) => (
                     <div key={e.id} className="rounded-lg overflow-hidden"
-                         style={{ border: "1px solid var(--border)" }}>
+                         style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
                       <button type="button"
                         className="w-full flex items-center justify-between px-3 py-2 text-xs text-left"
-                        style={{ background: "var(--bg-elevated)", color: "var(--text-primary)" }}
+                        style={{ background: "rgba(255,255,255,0.03)", color: "var(--text-primary)" }}
                         onClick={() => setExpandedPayload((p) => ({ ...p, [e.id]: !p[e.id] }))}>
                         <span className="flex items-center gap-2">
                           <Webhook className="w-3 h-3 shrink-0" style={{ color: "#16A97B" }} />
@@ -1059,7 +1095,7 @@ function OrdersSection({ secret }: { secret: string }) {
                       </button>
                       {expandedPayload[e.id] && (
                         <pre className="px-3 py-2 text-[10px] font-mono overflow-x-auto"
-                             style={{ background: "var(--bg-base)", color: "var(--text-secondary)", borderTop: "1px solid var(--border)" }}>
+                             style={{ background: "var(--bg-base)", color: "var(--text-secondary)", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                           {JSON.stringify(e.raw_payload, null, 2)}
                         </pre>
                       )}
@@ -1095,7 +1131,7 @@ function OrdersSection({ secret }: { secret: string }) {
           value={filters.status}
           onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
           className="rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+          style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
           <option value="">All Statuses</option>
           {["pending","paid","underpayment","overpayment","unmatched","expired","refunded"].map(s => (
             <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
@@ -1104,11 +1140,11 @@ function OrdersSection({ secret }: { secret: string }) {
         <input type="date" value={filters.dateFrom}
           onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
           className="rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+          style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }} />
         <input type="date" value={filters.dateTo}
           onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
           className="rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+          style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }} />
         <ActionBtn onClick={() => setFilters({ status: "", merchant: "", dateFrom: "", dateTo: "" })} small>
           Clear Filters
         </ActionBtn>
@@ -1122,10 +1158,10 @@ function OrdersSection({ secret }: { secret: string }) {
       )}
 
       {orders && orders.length > 0 && (
-        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
           <table className="w-full text-xs">
             <thead>
-              <tr style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
+              <tr style={{ background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                 {["Order Ref", "Merchant", "Customer", "Expected", "Received", "Status", "Date"].map((h) => (
                   <th key={h} className="px-3 py-3 text-left font-semibold uppercase tracking-wide"
                       style={{ color: "var(--text-muted)" }}>{h}</th>
@@ -1137,9 +1173,9 @@ function OrdersSection({ secret }: { secret: string }) {
                 <tr key={o.order_ref}
                     className="cursor-pointer transition-colors"
                     onClick={() => void loadDetail(o.order_ref)}
-                    style={{ borderTop: "1px solid var(--border)", background: "var(--bg-surface)" }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "var(--bg-surface)")}>
+                    style={{ borderTop: "1px solid rgba(255,255,255,0.08)", background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)")}>
                   <td className="px-3 py-3 font-mono" style={{ color: "#16A97B" }}>{o.order_ref}</td>
                   <td className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>{o.merchant_name}</td>
                   <td className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>{o.customer_name}</td>
@@ -1229,7 +1265,7 @@ function ToolsSection({ secret }: { secret: string }) {
       <SectionHeader title="Admin Tools" subtitle="Utilities and maintenance functions" />
 
       {/* Bank Account Lookup */}
-      <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+      <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
         <h3 className="font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Bank Account Lookup</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <FieldInput
@@ -1254,7 +1290,7 @@ function ToolsSection({ secret }: { secret: string }) {
       </div>
 
       {/* Bulk Expire Orders */}
-      <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+      <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
         <h3 className="font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Bulk Expire Orders</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           <FieldInput
@@ -1273,7 +1309,7 @@ function ToolsSection({ secret }: { secret: string }) {
       </div>
 
       {/* Reset Order */}
-      <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+      <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
         <h3 className="font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Reset Order</h3>
         <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
           Resets an order back to pending, clears payment data, and removes webhook events.
@@ -1328,7 +1364,7 @@ function ReconciliationSection({ secret }: { secret: string }) {
     <div>
       <SectionHeader title="Reconciliation" subtitle="Compare local ledger with Nomba transactions" />
 
-      <div className="rounded-xl p-4 mb-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+      <div className="rounded-xl p-4 mb-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <FieldInput
             label="From Date"
@@ -1372,7 +1408,7 @@ function ReconciliationSection({ secret }: { secret: string }) {
           </div>
 
           {result.orphans.length > 0 && (
-            <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
               <h3 className="font-semibold mb-3 text-red-400">Orphaned Transactions ({result.orphans.length})</h3>
               <div className="space-y-2">
                 {result.orphans.map((orphan) => (
@@ -1390,7 +1426,7 @@ function ReconciliationSection({ secret }: { secret: string }) {
           )}
 
           {result.drift.length > 0 && (
-            <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
               <h3 className="font-semibold mb-3 text-yellow-400">Amount Drift ({result.drift.length})</h3>
               <div className="space-y-2">
                 {result.drift.map((d) => (
@@ -1409,7 +1445,7 @@ function ReconciliationSection({ secret }: { secret: string }) {
           )}
 
           {result.summary && (
-            <div className="rounded-xl p-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{result.summary}</p>
             </div>
           )}
@@ -1474,15 +1510,15 @@ function WebhookEventsSection({ secret }: { secret: string }) {
         <input value={filters.orderRef} onChange={(e) => setFilters(p => ({ ...p, orderRef: e.target.value }))}
           placeholder="Filter by order ref"
           className="rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+          style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }} />
         <input value={filters.eventType} onChange={(e) => setFilters(p => ({ ...p, eventType: e.target.value }))}
           placeholder="Filter by event type"
           className="rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+          style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }} />
         <input type="date" value={filters.dateFrom}
           onChange={(e) => setFilters(p => ({ ...p, dateFrom: e.target.value }))}
           className="rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-base)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+          style={{ background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }} />
         <ActionBtn small onClick={() => { setFilters({ orderRef: "", eventType: "", dateFrom: "", dateTo: "" }); void load(); }}>
           Clear + Reload
         </ActionBtn>
@@ -1499,10 +1535,10 @@ function WebhookEventsSection({ secret }: { secret: string }) {
         <div className="space-y-1.5">
           {events.map((e) => (
             <div key={e.id} className="rounded-xl overflow-hidden"
-                 style={{ border: "1px solid var(--border)" }}>
+                 style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
               <button type="button"
                 className="w-full flex items-center justify-between px-4 py-3 text-xs text-left transition-colors"
-                style={{ background: "var(--bg-surface)", color: "var(--text-primary)" }}
+                style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", color: "var(--text-primary)" }}
                 onClick={() => setExpanded((p) => ({ ...p, [e.id]: !p[e.id] }))}>
                 <span className="flex items-center gap-3 min-w-0">
                   <Webhook className="w-3.5 h-3.5 shrink-0" style={{ color: "#16A97B" }} />
@@ -1527,7 +1563,7 @@ function WebhookEventsSection({ secret }: { secret: string }) {
                 <pre className="px-4 py-3 text-[11px] font-mono overflow-x-auto"
                      style={{
                        background: "var(--bg-base)", color: "var(--text-secondary)",
-                       borderTop: "1px solid var(--border)",
+                       borderTop: "1px solid rgba(255,255,255,0.08)",
                        maxHeight: "320px", overflowY: "auto",
                      }}>
                   {JSON.stringify(e.raw_payload, null, 2)}
@@ -1578,7 +1614,7 @@ function SystemHealthSection({ secret }: { secret: string }) {
   function EnvRow({ name, present, required }: { name: string; present: boolean; required: boolean }) {
     return (
       <div className="flex items-center justify-between py-2 text-xs"
-           style={{ borderBottom: "1px solid var(--border)" }}>
+           style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{name}</span>
         <span className="flex items-center gap-1.5">
           {present ? (
@@ -1642,7 +1678,7 @@ function SystemHealthSection({ secret }: { secret: string }) {
 
           {/* DB + Process tiles */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl p-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <div className="flex items-center gap-2 mb-2">
                 <Database className="w-3.5 h-3.5" style={{ color: "#16A97B" }} />
                 <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Database</p>
@@ -1656,7 +1692,7 @@ function SystemHealthSection({ secret }: { secret: string }) {
             </div>
             <StatTile label="Total Orders"    value={health.database.total_orders    ?? "—"} accent="#16A97B" />
             <StatTile label="Total Merchants" value={health.database.total_merchants ?? "—"} />
-            <div className="rounded-xl p-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <div className="flex items-center gap-2 mb-2">
                 <Cpu className="w-3.5 h-3.5" style={{ color: "#a855f7" }} />
                 <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Memory</p>
@@ -1668,25 +1704,25 @@ function SystemHealthSection({ secret }: { secret: string }) {
 
           {/* Env var checklist */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
               <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)" }}>Required Variables</p>
               {STATUS_REQUIRED.map((name) => (
                 <EnvRow key={name} name={name} present={health.env.vars[name] ?? false} required={true} />
               ))}
             </div>
-            <div className="rounded-xl p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
               <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)" }}>Optional Variables</p>
               {STATUS_OPTIONAL.map((name) => (
                 <EnvRow key={name} name={name} present={health.env.vars[name] ?? false} required={false} />
               ))}
-              <div className="mt-4 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "var(--text-muted)" }}>Process</p>
                 {[
                   ["Node",     health.process.node_version],
                   ["Platform", health.process.platform],
                   ["Env",      health.process.env],
                 ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between py-1.5 text-xs" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <div key={k} className="flex justify-between py-1.5 text-xs" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                     <span style={{ color: "var(--text-muted)" }}>{k}</span>
                     <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{v}</span>
                   </div>
@@ -1781,83 +1817,191 @@ export function AdminPage() {
   }
 
   const sections = [
-    { id: "overview"   as const, label: "Overview",   icon: LayoutDashboard, component: OverviewSection },
-    { id: "merchants"  as const, label: "Merchants",  icon: Users,           component: MerchantsSection },
-    { id: "orders"     as const, label: "Orders",     icon: Receipt,         component: OrdersSection },
-    { id: "reconcile"  as const, label: "Reconcile",  icon: GitCompare,      component: ReconciliationSection },
-    { id: "webhooks"   as const, label: "Webhooks",   icon: Webhook,         component: WebhookEventsSection },
-    { id: "health"     as const, label: "Health",     icon: Activity,        component: SystemHealthSection },
-    { id: "tools"      as const, label: "Tools",      icon: Wrench,          component: ToolsSection },
-    { id: "danger"     as const, label: "Danger",     icon: Trash2,          component: DangerSection },
+    { id: "overview"  as const, label: "Overview",  icon: LayoutDashboard, component: OverviewSection  },
+    { id: "merchants" as const, label: "Merchants", icon: Users,           component: MerchantsSection },
+    { id: "orders"    as const, label: "Orders",    icon: Receipt,         component: OrdersSection    },
+    { id: "reconcile" as const, label: "Reconcile", icon: GitCompare,      component: ReconciliationSection },
+    { id: "webhooks"  as const, label: "Webhooks",  icon: Webhook,         component: WebhookEventsSection  },
+    { id: "health"    as const, label: "Health",    icon: Activity,        component: SystemHealthSection   },
+    { id: "tools"     as const, label: "Tools",     icon: Wrench,          component: ToolsSection     },
+    { id: "danger"    as const, label: "Danger",    icon: Trash2,          component: DangerSection    },
   ];
 
   const ActiveComponent = sections.find(s => s.id === activeSection)?.component ?? OverviewSection;
+  const activeLabel = sections.find(s => s.id === activeSection)?.label ?? "";
 
   return (
-    <div className="min-h-screen flex"
+    <div className="flex min-h-screen transition-colors duration-300"
          style={{ background: "var(--bg-base)" }}>
-      
-      {/* Sidebar */}
-      <div className="w-64 border-r flex flex-col"
-           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
-        
-        {/* Header */}
-        <div className="p-4 border-b" style={{ borderColor: "var(--border)" }}>
-          <div className="flex items-center gap-3">
-            <LogoMark />
-            <div>
-              <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Admin Panel</p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>NairaRails Internal</p>
-            </div>
+
+      {/* Ambient sidebar glow */}
+      <div className="pointer-events-none fixed top-0 left-0 w-60 h-full opacity-[0.03] blur-[80px] z-0"
+           style={{ background: "radial-gradient(ellipse at 30% 40%, #16A97B 0%, transparent 70%)" }}
+           aria-hidden />
+
+      {/* ── Sidebar ── */}
+      <aside
+        className="hidden md:flex flex-col w-60 shrink-0 fixed inset-y-0 left-0 z-30"
+        style={{
+          background: "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(10,14,20,0.98) 100%)",
+          borderRight: "1px solid rgba(255,255,255,0.08)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          boxShadow: "4px 0 32px rgba(0,0,0,0.3), inset -1px 0 0 rgba(255,255,255,0.04)",
+        }}
+      >
+        {/* Brand */}
+        <div className="relative flex items-center gap-3 px-5 py-5 overflow-hidden"
+             style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          <div className="absolute inset-0 opacity-20 pointer-events-none"
+               style={{ background: "radial-gradient(ellipse at 0% 50%, rgba(22,169,123,0.3) 0%, transparent 70%)" }}
+               aria-hidden />
+          <div className="relative z-10 w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+               style={{ background: "rgba(22,169,123,0.15)", border: "1px solid rgba(22,169,123,0.3)" }}>
+            <Shield className="w-3.5 h-3.5" style={{ color: "#16A97B" }} />
           </div>
+          <div className="relative z-10 min-w-0">
+            <p className="font-bold text-sm leading-none" style={{ color: "var(--text-primary)" }}>Admin Panel</p>
+            <p className="text-[10px] mt-0.5 truncate" style={{ color: "rgba(100,116,139,0.7)" }}>NairaRails Internal</p>
+          </div>
+          <span className="relative z-10 ml-auto text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded-md shrink-0"
+                style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171" }}>
+            ops
+          </span>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-2">
-          {sections.map((section) => (
-            <button
-              key={section.id}
-              onClick={() => setActiveSection(section.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${activeSection === section.id 
-                  ? 'text-white shadow-lg' 
-                  : 'hover:opacity-80'}`}
-              style={{
-                background: activeSection === section.id 
-                  ? 'linear-gradient(135deg, #16A97B, #14B87C)'
-                  : 'transparent',
-                color: activeSection === section.id 
-                  ? '#ffffff'
-                  : 'var(--text-secondary)'
-              }}
-            >
-              <section.icon className="w-4 h-4" />
-              {section.label}
-              {activeSection === section.id && (
-                <ChevronRight className="w-3 h-3 ml-auto" />
-              )}
-            </button>
-          ))}
+        {/* Nav section label */}
+        <div className="px-5 pt-5 pb-2">
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em]"
+             style={{ color: "rgba(100,116,139,0.7)" }}>Navigation</p>
+        </div>
+
+        {/* Nav links */}
+        <nav className="flex-1 px-3 pb-4 space-y-0.5" aria-label="Admin navigation">
+          {sections.map((section) => {
+            const isActive = activeSection === section.id;
+            const isDanger = section.id === "danger";
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => setActiveSection(section.id)}
+                className="relative flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer"
+                style={{
+                  background: isActive
+                    ? isDanger
+                      ? "linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.08) 100%)"
+                      : "linear-gradient(135deg, rgba(22,169,123,0.20) 0%, rgba(22,169,123,0.08) 100%)"
+                    : "transparent",
+                  color: isActive
+                    ? isDanger ? "#f87171" : "#16A97B"
+                    : isDanger ? "rgba(248,113,113,0.55)" : "var(--text-muted)",
+                  border: isActive
+                    ? isDanger ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(22,169,123,0.25)"
+                    : "1px solid transparent",
+                  boxShadow: isActive
+                    ? isDanger
+                      ? "0 2px 12px rgba(239,68,68,0.10)"
+                      : "0 2px 12px rgba(22,169,123,0.12), inset 0 1px 0 rgba(255,255,255,0.05)"
+                    : "none",
+                  textShadow: isActive
+                    ? isDanger ? "0 0 16px rgba(239,68,68,0.4)" : "0 0 16px rgba(22,169,123,0.5)"
+                    : "none",
+                }}
+              >
+                {/* Active left indicator bar */}
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full"
+                        style={{
+                          background: isDanger
+                            ? "linear-gradient(180deg, #f87171, rgba(239,68,68,0.3))"
+                            : "linear-gradient(180deg, #16A97B, rgba(22,169,123,0.3))",
+                          boxShadow: isDanger ? "0 0 8px rgba(239,68,68,0.5)" : "0 0 8px rgba(22,169,123,0.6)",
+                        }} />
+                )}
+                {/* Icon */}
+                <span className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md transition-all duration-200"
+                      style={{
+                        background: isActive
+                          ? isDanger ? "rgba(239,68,68,0.15)" : "rgba(22,169,123,0.15)"
+                          : "transparent",
+                        boxShadow: isActive
+                          ? isDanger ? "0 0 8px rgba(239,68,68,0.2)" : "0 0 8px rgba(22,169,123,0.2)"
+                          : "none",
+                      }}>
+                  <section.icon className="w-3.5 h-3.5" />
+                </span>
+                {section.label}
+              </button>
+            );
+          })}
         </nav>
 
+        {/* Divider */}
+        <div className="mx-4 h-px"
+             style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent)" }} />
+
         {/* Footer */}
-        <div className="p-4 border-t" style={{ borderColor: "var(--border)" }}>
+        <div className="px-3 py-4 space-y-1">
+          {/* Session chip */}
+          <div className="flex items-center gap-2 mx-1 mb-2 px-3 py-2 rounded-xl"
+               style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse"
+                  style={{ background: "#ef4444", boxShadow: "0 0 6px rgba(239,68,68,0.8)" }} />
+            <span className="text-[10px] font-mono truncate" style={{ color: "rgba(100,116,139,0.8)" }}>
+              admin session active
+            </span>
+          </div>
+
+          {/* Sign out */}
           <button
+            type="button"
             onClick={() => setSecret(null)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+            className="flex items-center gap-3 w-full text-left rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer"
+            style={{ color: "var(--text-muted)", border: "1px solid transparent" }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "rgba(239,68,68,0.08)";
+              e.currentTarget.style.borderColor = "rgba(239,68,68,0.20)";
+              e.currentTarget.style.color = "#f87171";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.borderColor = "transparent";
+              e.currentTarget.style.color = "var(--text-muted)";
+            }}
           >
-            <LogOut className="w-4 h-4" />
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md">
+              <LogOut className="w-3.5 h-3.5" />
+            </span>
             Sign Out
           </button>
         </div>
-      </div>
+      </aside>
 
-      {/* Main Content */}
-      <div className="flex-1">
+      {/* ── Main content ── */}
+      <main className="flex-1 md:ml-60 min-h-screen pb-8">
+        {/* Top bar */}
+        <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-3"
+             style={{
+               background: "rgba(10,14,20,0.85)",
+               backdropFilter: "blur(16px)",
+               WebkitBackdropFilter: "blur(16px)",
+               borderBottom: "1px solid rgba(255,255,255,0.06)",
+             }}>
+          <div>
+            <h1 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{activeLabel}</h1>
+            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>NairaRails Admin · Internal Ops</p>
+          </div>
+          <span className="text-[10px] font-semibold px-2 py-1 rounded-lg"
+                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}>
+            Restricted Access
+          </span>
+        </div>
+
         <div className="p-6 max-w-6xl">
           <ActiveComponent secret={secret} />
         </div>
-      </div>
+      </main>
     </div>
   );
 }
