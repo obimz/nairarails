@@ -17,12 +17,10 @@ const ExceptionQuerySchema = z.object({
 });
 
 // ─── GET /api/v1/exceptions ───────────────────────────────────────────────────
-// Returns all exception-state orders belonging to the calling merchant.
+// Returns all orders in a non-normal state (underpayment / overpayment / unmatched).
 // Optionally filtered by type via ?type=overpayment.
-router.get("/exceptions", apiKeyAuth, async (req, res, next) => {
+router.get("/exceptions", async (req, res, next) => {
   try {
-    const merchant = res.locals.merchant;
-
     const query = ExceptionQuerySchema.safeParse(req.query);
     if (!query.success) {
       throw new AppError(422, "VALIDATION_ERROR", "Invalid query parameters");
@@ -37,7 +35,7 @@ router.get("/exceptions", apiKeyAuth, async (req, res, next) => {
       : { in: ["underpayment", "overpayment", "unmatched"] as OrderStatus[] };
 
     const orders = await prisma.order.findMany({
-      where:   { status: statusFilter, merchantId: merchant.id },
+      where:   { status: statusFilter },
       orderBy: { updatedAt: "desc" },
       select: {
         orderRef:           true,
@@ -48,7 +46,7 @@ router.get("/exceptions", apiKeyAuth, async (req, res, next) => {
       },
     });
 
-    logger.info({ filter: type ?? "all", count: orders.length, merchantId: merchant.id }, "Exceptions listed");
+    logger.info({ filter: type ?? "all", count: orders.length }, "Exceptions listed");
 
     res.status(200).json({
       results: orders.map((o) => {
@@ -62,7 +60,7 @@ router.get("/exceptions", apiKeyAuth, async (req, res, next) => {
           shortfall_kobo:       shortfallKobo(expected, received),
           excess_kobo:          excessKobo(expected, received),
           raised_at:            o.updatedAt.toISOString(),
-          resolved:             false,
+          resolved:             false,   // Phase 4 adds a resolved status via refund flow
           resolved_at:          null,
         };
       }),
@@ -74,17 +72,14 @@ router.get("/exceptions", apiKeyAuth, async (req, res, next) => {
 });
 
 // ─── POST /api/v1/exceptions/:order_ref/refund-excess ────────────────────────
-// Validates the order is an overpayment belonging to the calling merchant,
-// then transfers the excess back to the original payer via Nomba.
-router.post("/exceptions/:order_ref/refund-excess", apiKeyAuth, async (req, res, next) => {
+// Validates the order is an overpayment with captured sender details, then
+// Phase 4 will call Nomba to transfer the excess back to the original payer.
+router.post("/exceptions/:order_ref/refund-excess", async (req, res, next) => {
   try {
-    const merchant = res.locals.merchant;
     const { order_ref } = req.params as { order_ref: string };
 
     const order = await prisma.order.findUnique({ where: { orderRef: order_ref } });
-
-    // Treat wrong-merchant orders as 404 — don't leak other merchants' data
-    if (!order || order.merchantId !== merchant.id) {
+    if (!order) {
       throw new AppError(404, "ORDER_NOT_FOUND", `Order '${order_ref}' not found`);
     }
 
@@ -116,7 +111,6 @@ router.post("/exceptions/:order_ref/refund-excess", apiKeyAuth, async (req, res,
       {
         order_ref,
         refundKobo,
-        merchantId:    merchant.id,
         senderAccount: order.senderAccountNumber,
         senderBank:    order.senderBankCode,
       },
@@ -180,106 +174,4 @@ router.post("/exceptions/:order_ref/refund-excess", apiKeyAuth, async (req, res,
   }
 });
 
-// ─── POST /api/v1/exceptions/:order_ref/refund-shortfall ─────────────────────
-// Validates the order is an underpayment belonging to the calling merchant,
-// then transfers the full received amount back to the original payer via Nomba.
-// The order is marked `refunded` and closed — no splits were ever executed.
-router.post("/exceptions/:order_ref/refund-shortfall", apiKeyAuth, async (req, res, next) => {
-  try {
-    const merchant = res.locals.merchant;
-    const { order_ref } = req.params as { order_ref: string };
-
-    const order = await prisma.order.findUnique({ where: { orderRef: order_ref } });
-
-    // Treat wrong-merchant orders as 404 — don't leak other merchants' data.
-    if (!order || order.merchantId !== merchant.id) {
-      throw new AppError(404, "ORDER_NOT_FOUND", `Order '${order_ref}' not found`);
-    }
-
-    if (order.status !== "underpayment") {
-      throw new AppError(
-        422,
-        "VALIDATION_ERROR",
-        `Order '${order_ref}' is not an underpayment — current status: ${order.status}`
-      );
-    }
-
-    if (!order.senderAccountNumber || !order.senderBankCode) {
-      throw new AppError(
-        422,
-        "VALIDATION_ERROR",
-        `Order '${order_ref}' has no sender account on record — cannot initiate refund`
-      );
-    }
-
-    const refundKobo = Number(order.receivedAmountKobo ?? 0);
-
-    if (refundKobo <= 0) {
-      throw new AppError(422, "VALIDATION_ERROR", `No received amount to refund for order '${order_ref}'`);
-    }
-
-    logger.info(
-      {
-        order_ref,
-        refundKobo,
-        merchantId:    merchant.id,
-        senderAccount: order.senderAccountNumber,
-        senderBank:    order.senderBankCode,
-      },
-      "Initiating refund-shortfall via Nomba transfer"
-    );
-
-    // Step 1: Verify recipient before sending — never skip lookup.
-    const { accountName } = await lookupBankAccount({
-      bankCode:      order.senderBankCode,
-      accountNumber: order.senderAccountNumber,
-    });
-
-    // Step 2: Transfer the full received amount back to the original payer.
-    const merchantTxRef = `refund_shortfall_${order_ref}`;
-    const { transferRef, status: txStatus } = await transferToBank({
-      amountKobo:    refundKobo,
-      bankCode:      order.senderBankCode,
-      accountNumber: order.senderAccountNumber,
-      accountName,
-      narration:     `NairaRails refund — underpayment for order ${order_ref}`,
-      merchantTxRef,
-    });
-
-    // Step 3: Mark order as refunded and log the movement.
-    await prisma.$transaction([
-      prisma.order.update({
-        where: { orderRef: order_ref },
-        data:  { status: "refunded" },
-      }),
-      prisma.ledgerEntry.create({
-        data: {
-          orderRef:   order_ref,
-          entryType:  "refund_issued",
-          amountKobo: BigInt(-refundKobo), // debit — money leaving
-          reference:  transferRef,
-          narration:  `Underpayment refund to ${order.senderName ?? order.senderAccountNumber}: ${refundKobo} kobo`,
-        },
-      }),
-    ]);
-
-    logger.info(
-      { order_ref, refundKobo, transferRef, txStatus, refundConfirmed },
-      `Refund-excess ${refundConfirmed ? "completed" : "initiated (pending confirmation)"}`
-    );
-
-    res.status(200).json({
-      order_ref,
-      refunded_amount_kobo: refundKobo,
-      sender_account:       order.senderAccountNumber,
-      sender_bank:          order.senderBankCode,
-      status:               refundConfirmed ? "resolved" : "pending",
-      nomba_transfer_ref:   transferRef,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
 export { router as exceptionRouter };
-

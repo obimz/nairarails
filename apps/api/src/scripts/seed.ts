@@ -7,19 +7,9 @@
 // Safe to run multiple times — deletes existing DEMO-* rows first, then re-inserts.
 
 import { prisma } from "../lib/prisma.js";
-import { generateApiKey } from "../lib/generateApiKey.js";
-import crypto from "crypto";
 
 async function main() {
   console.log("── NairaRails Demo Seed ──\n");
-
-  const webhookUrl = process.env["DEMO_MERCHANT_WEBHOOK_URL"] ?? null;
-
-  // The demo seed key is fixed so existing Thunder Client collections keep working.
-  // We hash it and store the hash — exactly like a real key.
-  const DEMO_RAW_KEY = "nrk_live_demo_seed_key";
-  const demoHash     = crypto.createHash("sha256").update(DEMO_RAW_KEY).digest("hex");
-  const demoPrefix   = DEMO_RAW_KEY.slice(0, 20);
 
   const seedMerchant = await prisma.merchant.upsert({
     where: { email: "demo@nairarails.dev" },
@@ -40,11 +30,6 @@ async function main() {
     },
   });
   console.log(`✓ Seed merchant ready: ${seedMerchant.email} (${seedMerchant.id})`);
-  if (webhookUrl) {
-    console.log(`  webhookUrl: ${webhookUrl}`);
-  } else {
-    console.log("  webhookUrl: not set — set DEMO_MERCHANT_WEBHOOK_URL in .env to test outbound notifications");
-  }
 
   // Clean up any existing DEMO-* rows so re-runs are idempotent
   const demoRefs = ["DEMO-001", "DEMO-002", "DEMO-003", "DEMO-004", "DEMO-005"];

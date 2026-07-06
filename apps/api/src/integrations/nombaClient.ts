@@ -12,11 +12,12 @@
 
 import { logger } from "../lib/logger.js";
 
-const BASE_URL    = process.env["NOMBA_BASE_URL"]    ?? "https://sandbox.api.nomba.com/v1";
-const V2_BASE_URL = BASE_URL.replace("/v1", "/v2");
-const ACCOUNT_ID  = process.env["NOMBA_ACCOUNT_ID"]  ?? "";
-const CLIENT_ID   = process.env["NOMBA_CLIENT_ID"]   ?? "";
-const CLIENT_SECRET = process.env["NOMBA_CLIENT_SECRET"] ?? "";
+const BASE_URL      = process.env["NOMBA_BASE_URL"]        ?? "https://sandbox.api.nomba.com/v1";
+const V2_BASE_URL   = BASE_URL.replace("/v1", "/v2");
+const ACCOUNT_ID    = process.env["NOMBA_ACCOUNT_ID"]      ?? "";
+const SUB_ACCOUNT_ID = process.env["NOMBA_SUB_ACCOUNT_ID"] ?? "";
+const CLIENT_ID     = process.env["NOMBA_CLIENT_ID"]       ?? "";
+const CLIENT_SECRET = process.env["NOMBA_CLIENT_SECRET"]   ?? "";
 
 // ─── Typed error ──────────────────────────────────────────────────────────────
 export class NombaApiError extends Error {
