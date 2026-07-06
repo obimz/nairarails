@@ -9,6 +9,7 @@
  * GET /api/v1/merchants/me — authenticated profile lookup.
  */
 
+import crypto from "crypto";
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
 import { MerchantSignupSchema } from "@nairarails/shared-types";
@@ -18,6 +19,7 @@ import { AppError } from "../middleware/errorHandler.js";
 import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 import { jwtAuth } from "../middleware/jwtAuth.js";
 import { generateApiKey } from "../lib/generateApiKey.js";
+import { logger } from "../lib/logger.js";
 
 const router: ExpressRouter = Router();
 
@@ -38,12 +40,15 @@ router.post(
 
       // Generate a hashed key using the new system
       const { raw, hash, prefix, issuedAt } = generateApiKey();
+      // Generate webhook secret (Phase 15)
+      const webhookSecret = crypto.randomBytes(32).toString("hex");
 
       const created = await prisma.merchant.create({
         data: {
           name,
           email,
           webhookUrl:    webhookUrl ?? null,
+          webhookSecret, // Phase 15
           emailVerified: true,   // legacy path skips email verification
           apiKeyHash:    hash,
           apiKeyPrefix:  prefix,
@@ -123,6 +128,42 @@ router.patch("/profile", jwtAuth, async (req, res, next) => {
       merchantId: updated.id,
       name:       updated.name,
       webhookUrl: updated.webhookUrl,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/v1/merchants/webhook-secret/rotate ────────────────────────────
+// Phase 15: Rotates the webhook secret used to sign outbound webhooks.
+// The new secret is returned once — merchant must update their verification logic.
+router.post("/webhook-secret/rotate", jwtAuth, async (_req, res, next) => {
+  try {
+    const merchant = res.locals.merchant;
+
+    // Generate new 256-bit secret
+    const newSecret = crypto.randomBytes(32).toString("hex");
+
+    await prisma.merchant.update({
+      where: { id: merchant.id },
+      data:  { webhookSecret: newSecret },
+    });
+
+    logger.info({ merchantId: merchant.id }, "Webhook secret rotated");
+
+    const merchant = res.locals.merchant;
+
+    const updated = await prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        ...(name       !== undefined ? { name }                     : {}),
+        ...(webhookUrl !== undefined ? { webhookUrl: webhookUrl ?? null } : {}),
+      },
+    });
+
+    res.status(200).json({
+      webhookSecret: newSecret,
+      message: "Webhook secret rotated. Update your signature verification logic immediately — the old secret is now invalid.",
     });
   } catch (err) {
     next(err);

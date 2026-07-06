@@ -1,9 +1,11 @@
 import { Router, type Router as ExpressRouter } from "express";
 import { prisma } from "../db/client.js";
 import { logger } from "../lib/logger.js";
-import { jwtAuth } from "../middleware/jwtAuth.js";
+import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 
 const router: ExpressRouter = Router();
+
+router.use(apiKeyAuth);
 
 // ─── GET /api/v1/dashboard/overview ──────────────────────────────────────────
 // Aggregates order stats scoped to the calling merchant.

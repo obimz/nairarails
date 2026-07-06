@@ -73,6 +73,9 @@ model Merchant {
   /// Null = never expires. Set via keys/rotate or keys/issue to add a hard expiry.
   apiKeyExpiresAt DateTime? @map("api_key_expires_at")
 
+  /// Webhook secret for signing outbound payloads — generated on signup, rotatable via settings
+  webhookSecret String?  @map("webhook_secret")
+
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

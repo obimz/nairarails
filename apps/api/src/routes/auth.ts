@@ -7,6 +7,7 @@
  * GET  /api/v1/auth/me        — return merchant profile (JWT-auth)
  */
 
+import crypto from "crypto";
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
@@ -59,11 +60,15 @@ router.post("/auth/register", async (req, res, next) => {
       throw new AppError(500, "INTERNAL_ERROR", authError?.message ?? "Failed to create auth user");
     }
 
+    // Generate webhook secret on signup (Phase 15)
+    const webhookSecret = crypto.randomBytes(32).toString("hex");
+
     const merchant = await prisma.merchant.create({
       data: {
         name,
         email,
         webhookUrl:    webhookUrl ?? null,
+        webhookSecret, // Phase 15: secret for signing outbound webhooks
         supabaseUid:   authData.user.id,
         emailVerified: false,
       },

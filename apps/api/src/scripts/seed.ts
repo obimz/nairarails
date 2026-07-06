@@ -24,21 +24,19 @@ async function main() {
   const seedMerchant = await prisma.merchant.upsert({
     where: { email: "demo@nairarails.dev" },
     update: {
-      name:          "Demo Marketplace",
-      apiKeyHash:    demoHash,
-      apiKeyPrefix:  demoPrefix,
-      apiKeyIssuedAt: new Date(),
+      name: "Demo Marketplace",
+      apiKeyHash: "c2457662dc55d20ab5397b0867a2beaff1be87af86e39dedd36cc2014bd545bf",
+      apiKeyPrefix: "nrk_live_demo_seed_k",
+      webhookUrl: null,
       emailVerified: true,
-      webhookUrl:    webhookUrl,
     },
     create: {
-      name:          "Demo Marketplace",
-      email:         "demo@nairarails.dev",
-      apiKeyHash:    demoHash,
-      apiKeyPrefix:  demoPrefix,
-      apiKeyIssuedAt: new Date(),
+      name: "Demo Marketplace",
+      email: "demo@nairarails.dev",
+      apiKeyHash: "c2457662dc55d20ab5397b0867a2beaff1be87af86e39dedd36cc2014bd545bf",
+      apiKeyPrefix: "nrk_live_demo_seed_k",
+      webhookUrl: null,
       emailVerified: true,
-      webhookUrl:    webhookUrl,
     },
   });
   console.log(`✓ Seed merchant ready: ${seedMerchant.email} (${seedMerchant.id})`);

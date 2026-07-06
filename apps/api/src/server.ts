@@ -12,6 +12,7 @@ import { merchantRouter }  from "./routes/merchants.js";
 import { authRouter }      from "./routes/auth.js";
 import { keysRouter }      from "./routes/keys.js";
 import { errorHandler }    from "./middleware/errorHandler.js";
+import { authLimiter, apiLimiter, globalLimiter } from "./middleware/rateLimiter.js";
 import { logger }          from "./lib/logger.js";
 
 const app: Express = express();
@@ -44,6 +45,22 @@ app.use((req, _res, next) => {
   logger.info({ method: req.method, url: req.url, ip: req.ip }, "→ incoming request");
   next();
 });
+
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+// Apply rate limiters before routes. Order matters: more specific limits first.
+
+// Auth routes: strict limit to prevent credential stuffing
+app.use("/api/v1/auth/register", authLimiter);
+app.use("/api/v1/auth/login", authLimiter);
+
+// API routes: per-key limits on authenticated endpoints
+app.use("/api/v1/orders", apiLimiter);
+app.use("/api/v1/exceptions", apiLimiter);
+app.use("/api/v1/dashboard", apiLimiter);
+app.use("/api/v1/merchants/keys", apiLimiter);
+
+// Global limit for everything else
+app.use(globalLimiter);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/", healthRouter);

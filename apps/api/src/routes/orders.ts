@@ -6,12 +6,15 @@ import { calculateSplits, shortfallKobo, excessKobo } from "@nairarails/webhook-
 import { validate } from "../middleware/validate.js";
 import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 import { prisma } from "../db/client.js";
 import { createVirtualAccount } from "../integrations/nombaClient.js";
 import { validateSplitBankCodes } from "../lib/bankValidator.js";
 import { logger } from "../lib/logger.js";
 
 const router: ExpressRouter = Router();
+
+router.use(apiKeyAuth);
 
 // ─── Query schema for GET /orders ─────────────────────────────────────────────
 const ListOrdersQuerySchema = z.object({
@@ -60,6 +63,7 @@ router.post(
             expectedAmountKobo: BigInt(expected_amount_kobo),
             currency,
             status:             "pending",
+            merchantId:         res.locals.merchant.id,
           },
         });
 
