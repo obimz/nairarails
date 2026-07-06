@@ -15,8 +15,11 @@
  *     the Node process.
  *  4. Errors are logged, not rethrown — observable in logs, retriable manually,
  *     but never fatal.
+ *  5. HMAC-SHA256 signature (Phase 15) — merchants can verify payloads are
+ *     authentic using the `nairarails-signature` header.
  */
 
+import crypto from "crypto";
 import type { Merchant } from "@prisma/client";
 import { logger } from "./logger.js";
 
@@ -38,10 +41,27 @@ export async function notifyMerchant(
   if (!merchant.webhookUrl) return;
 
   try {
+    const timestamp = new Date().toISOString();
+    const body = JSON.stringify(payload);
+
+    // Sign the payload with merchant's webhook secret (Phase 15)
+    // Signature = HMAC-SHA256(webhookSecret, body), hex-encoded
+    let signature = "";
+    if (merchant.webhookSecret) {
+      signature = crypto
+        .createHmac("sha256", merchant.webhookSecret)
+        .update(body)
+        .digest("hex");
+    }
+
     const response = await fetch(merchant.webhookUrl, {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(payload),
+      headers: {
+        "Content-Type": "application/json",
+        "nairarails-signature": signature,
+        "nairarails-timestamp": timestamp,
+      },
+      body,
       signal:  AbortSignal.timeout(5000), // 5s hard timeout
     });
 

@@ -230,12 +230,12 @@ export function LandingPage() {
         </div>
       </header>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-24 md:space-y-36 pb-24">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-20 md:space-y-28 pb-24">
 
         {/* ══════════════════════════════════════════════════════════════════
             HERO
         ══════════════════════════════════════════════════════════════════ */}
-        <section className="pt-16 md:pt-24 flex flex-col items-center text-center space-y-8">
+        <section className="pt-12 md:pt-20 flex flex-col items-center text-center space-y-8">
           <FadeSection className="space-y-6 max-w-4xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-mono"
                  style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.25)", color: "var(--text-brand)" }}>
@@ -244,14 +244,14 @@ export function LandingPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-[#16A97B] animate-pulse" />
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-[1.1] tracking-tight"
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold leading-tight tracking-tight"
                 style={{ color: "var(--text-primary)" }}>
               Every marketplace order<br />
               gets its own{" "}
               <span style={{ color: "var(--text-brand)" }}>bank account.</span>
             </h1>
 
-            <p className="text-base sm:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-base leading-relaxed max-w-2xl mx-auto" style={{ color: "var(--text-secondary)" }}>
               NairaRails sits between your checkout and Nomba. One API call creates a unique virtual
               account per order. The moment a buyer pays, the webhook fires, classifies the payment,
               and splits funds to seller, platform, and rider —{" "}
@@ -285,10 +285,10 @@ export function LandingPage() {
               <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
                 The cost of spreadsheet plumbing
               </p>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight mt-2" style={{ color: "var(--text-primary)" }}>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight mt-2" style={{ color: "var(--text-primary)" }}>
                 ₦<Counter target={35560000000} />
               </h2>
-              <p className="leading-relaxed text-sm sm:text-base" style={{ color: "var(--text-secondary)" }}>
+              <p className="leading-relaxed text-sm" style={{ color: "var(--text-secondary)" }}>
                 Lost to publicly documented reconciliation failures in Nigeria between 2023 and 2024.
                 Every marketplace that reconciles manually is leaking margin on every edge case.
               </p>
@@ -353,7 +353,7 @@ export function LandingPage() {
           <FadeSection className="text-center max-w-2xl mx-auto space-y-4">
             <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>The Flow</p>
             <h2 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>How NairaRails works</h2>
-            <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
               Three steps from order creation to settled funds. No changes to your checkout flow.
             </p>
           </FadeSection>
@@ -396,7 +396,7 @@ export function LandingPage() {
               <h2 className="text-xl sm:text-2xl font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
                 Every naira tagged.<br />Every exception visible.
               </h2>
-              <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                 The live dashboard shows every order's payment status, every split's execution state,
                 and every exception with its current action — underpayment shortfall, overpayment
                 with one-click refund, or unmatched payment quarantined for review.
@@ -426,7 +426,7 @@ export function LandingPage() {
           <FadeSection className="text-center max-w-2xl mx-auto space-y-4">
             <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Security & Reliability</p>
             <h2 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Engineering-first infrastructure</h2>
-            <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
               Every decision in the stack was made with financial correctness in mind.
             </p>
           </FadeSection>
@@ -511,10 +511,10 @@ export function LandingPage() {
                      style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.30)", color: "var(--text-brand)" }}>
                   <Lock className="w-3.5 h-3.5" /> Production-ready infrastructure
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold tracking-tight leading-tight" style={{ color: "var(--text-primary)" }}>
+                <h2 className="text-xl md:text-2xl font-bold tracking-tight leading-tight" style={{ color: "var(--text-primary)" }}>
                   Wire your marketplace<br />in one API call.
                 </h2>
-                <p className="text-sm sm:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                   NairaRails doesn't change your checkout flow.{" "}
                   <strong style={{ color: "var(--text-primary)" }}>
                     It replaces the spreadsheet your finance team runs after it.

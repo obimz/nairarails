@@ -11,12 +11,9 @@
  */
 
 import React from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Line } from "@react-three/drei";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
-import * as THREE from "three";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { Canvas, useFrame } from "@react-three/fiber";
+import { Html, Line } from "@react-three/drei";
+import type { Mesh, Group } from "three";
 
 type Vec3 = [number, number, number];
 
@@ -229,7 +226,7 @@ function ParticleField() {
 // ─── Main network group ───────────────────────────────────────────────────────
 
 function BankNetwork() {
-  const groupRef = React.useRef<THREE.Group>(null);
+  const groupRef = React.useRef<Group>(null);
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current) return;
