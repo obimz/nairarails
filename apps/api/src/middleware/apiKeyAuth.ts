@@ -75,6 +75,20 @@ export async function apiKeyAuth(
       return;
     }
 
+    // Check suspension status
+    if (merchant.suspended) {
+      logger.warn({ path: req.path, merchantId: merchant.id }, "Suspended merchant API key rejected");
+      res.status(403).json({
+        error: {
+          code: "ACCOUNT_SUSPENDED",
+          message: merchant.suspendedNote
+            ? `Your account has been suspended: ${merchant.suspendedNote}`
+            : "Your account has been suspended. Contact support to appeal.",
+        },
+      });
+      return;
+    }
+
     res.locals.merchant = merchant;
     next();
   } catch (err) {

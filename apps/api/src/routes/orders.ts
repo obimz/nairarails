@@ -126,11 +126,13 @@ router.get("/orders", async (req, res, next) => {
     }
     const { page, page_size, status } = query.data;
     const skip = (page - 1) * page_size;
+    const merchantId = res.locals.merchant.id;
 
-    // Build a status filter only when one was requested.
-    const where: Prisma.OrderWhereInput = status
-      ? { status: status as Prisma.EnumOrderStatusFilter }
-      : {};
+    // Always scope to the authenticated merchant; optionally filter by status.
+    const where: Prisma.OrderWhereInput = {
+      merchantId,
+      ...(status ? { status: status as Prisma.EnumOrderStatusFilter } : {}),
+    };
 
     const [orders, total_count] = await Promise.all([
       prisma.order.findMany({
@@ -174,17 +176,18 @@ router.get("/orders", async (req, res, next) => {
 router.get("/orders/:order_ref/reconciliation", async (req, res, next) => {
   try {
     const { order_ref } = req.params as { order_ref: string };
+    const merchantId = res.locals.merchant.id;
 
-    // Fetch order + splits + ledger entries in one query.
+    // Scope to the merchant — prevents one merchant from reading another's order.
     const order = await prisma.order.findUnique({
       where: { orderRef: order_ref },
       include: {
-        splits:       { orderBy: { createdAt: "asc" } },
+        splits:        { orderBy: { createdAt: "asc" } },
         ledgerEntries: { orderBy: { createdAt: "asc" } },
       },
     });
 
-    if (!order) {
+    if (!order || order.merchantId !== merchantId) {
       throw new AppError(404, "ORDER_NOT_FOUND", `Order '${order_ref}' not found`);
     }
 

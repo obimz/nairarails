@@ -125,7 +125,7 @@ export const apiPost = <T>(path: string, body?: unknown) =>
 // Secret is passed explicitly per call — never stored in localStorage.
 
 export async function adminFetch<T>(
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "DELETE" | "PATCH",
   path: string,
   secret: string,
   body?: unknown
