@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -52,14 +52,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
       - name: Deploy to Railway
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service nairarails
-        working-directory: apps/api
+        uses: railwayapp/deploy-railway@v1
+        with:
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}
+          service: nairarails
 
   # ─── Deploy Web to Vercel ───────────────────────────────────────────────
   deploy-web:
