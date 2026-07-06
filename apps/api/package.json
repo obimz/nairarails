@@ -8,7 +8,7 @@
   "scripts": {
     "build": "prisma generate --schema=prisma/schema.prisma && tsc -b",
     "dev": "tsx watch --env-file=../../.env src/server.ts",
-    "start": "node --env-file=../../.env dist/server.js",
+    "start": "node dist/server.js",
     "db:migrate": "npx prisma migrate deploy --schema=prisma/schema.prisma",
     "db:push": "npx prisma db push --schema=prisma/schema.prisma",
     "db:studio": "npx prisma studio --schema=prisma/schema.prisma",
@@ -37,6 +37,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.30",
+    "dotenv-cli": "^8.0.0",
     "tsx": "^4.19.4",
     "typescript": "^5.7.3"
   }

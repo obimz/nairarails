@@ -33,6 +33,7 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+.kiro/
 *.swp
 *.swo
 
@@ -47,7 +48,7 @@ CLAUDE.md
 01-API-CONTRACT.md
 
 .env
-.claude
-RATE_LIMITING.md
-TSCONFIG_EXPLAINED.md
-SCAN_REPORT.md
+
+# Local dev utility scripts
+gen-sig.mjs
+hardening-test.mjs
