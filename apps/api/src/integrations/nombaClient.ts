@@ -13,6 +13,7 @@
 import { logger } from "../lib/logger.js";
 
 const BASE_URL    = process.env["NOMBA_BASE_URL"]    ?? "https://sandbox.api.nomba.com/v1";
+const V2_BASE_URL = BASE_URL.replace("/v1", "/v2");
 const ACCOUNT_ID  = process.env["NOMBA_ACCOUNT_ID"]  ?? "";
 const CLIENT_ID   = process.env["NOMBA_CLIENT_ID"]   ?? "";
 const CLIENT_SECRET = process.env["NOMBA_CLIENT_SECRET"] ?? "";
@@ -156,10 +157,6 @@ function extractVAFields(response: Record<string, unknown>): CreateVirtualAccoun
  * Create a virtual account (NUBAN) for a single order.
  * POST /accounts/virtual
  *
-/**
- * Create a virtual account (NUBAN) for a single order.
- * POST /accounts/virtual
- *
  * accountRef = order_ref so aliasAccountReference in the webhook maps back
  * to the order with no secondary lookup.
  *
@@ -207,7 +204,7 @@ export interface LookupBankAccountResult {
 
 /**
  * Resolve a bank account number to the registered account name.
- * POST /transfers/bank/lookup
+ * POST /v2/transfers/bank/lookup
  *
  * ALWAYS call this before transferToBank — sending to a wrong NUBAN can be
  * irreversible, and the resolved name is a required field on the transfer.
@@ -219,13 +216,26 @@ export async function lookupBankAccount(
 
   logger.info({ bankCode, accountNumber }, "Looking up bank account");
 
-  const response = await nombaRequest<{ data: { accountName: string } }>(
-    "POST",
-    "/transfers/bank/lookup",
-    { bankCode, accountNumber }
-  );
+  const token = await getAccessToken();
+  const res = await fetch(`${V2_BASE_URL}/transfers/bank/lookup`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      "accountId": ACCOUNT_ID,
+    },
+    body: JSON.stringify({ bankCode, accountNumber }),
+  });
 
-  const accountName = response.data.accountName;
+  const json = await res.json() as Record<string, unknown>;
+  if (!res.ok) {
+    const errMsg = (json["message"] as string) ?? `Nomba lookup error ${res.status}`;
+    logger.error({ bankCode, accountNumber, status: res.status, body: json }, errMsg);
+    throw new NombaApiError(res.status, errMsg, json);
+  }
+
+  const data = json["data"] as Record<string, unknown> | undefined;
+  const accountName = (data?.["accountName"] as string) ?? "";
   logger.info({ bankCode, accountNumber, accountName }, "Bank account resolved");
   return { accountName };
 }
@@ -248,7 +258,10 @@ export interface TransferToBankResult {
 
 /**
  * Initiate a bank transfer to a verified recipient.
- * POST /transfers/bank
+ * POST /v2/transfers/bank
+ *
+ * IMPORTANT: Nomba Transfers API expects amount in NAIRA, not kobo.
+ * This function accepts kobo (internal standard) and converts before sending.
  *
  * merchantTxRef must be unique per transfer — collisions will cause Nomba to
  * return the original transfer result rather than initiating a new one, which
@@ -260,37 +273,46 @@ export async function transferToBank(
 ): Promise<TransferToBankResult> {
   const { amountKobo, bankCode, accountNumber, accountName, narration, merchantTxRef } = params;
 
+  const amountNaira = amountKobo / 100;
+
   logger.info(
-    { amountKobo, bankCode, accountNumber, merchantTxRef },
-    "Initiating bank transfer"
+    { amountKobo, amountNaira, bankCode, accountNumber, merchantTxRef },
+    "Initiating bank transfer (v2)"
   );
 
-  type TransferResponse = {
-    data: {
-      merchantTxRef?: string;
-      status?:        string;
-      transferId?:    string;
-      reference?:     string;
-    };
-  };
-
-  const response = await nombaRequest<TransferResponse>("POST", "/transfers/bank", {
-    amount:        amountKobo,  // kobo
-    bankCode,
-    accountNumber,
-    accountName,
-    senderName:    "NairaRails",
-    narration,
-    merchantTxRef,
+  const token = await getAccessToken();
+  const res = await fetch(`${V2_BASE_URL}/transfers/bank`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      "accountId": ACCOUNT_ID,
+    },
+    body: JSON.stringify({
+      amount:        amountNaira,
+      bankCode,
+      accountNumber,
+      accountName,
+      senderName:    "NairaRails",
+      narration,
+      merchantTxRef,
+    }),
   });
 
-  const d = response.data;
-  const transferRef = d.merchantTxRef ?? d.transferId ?? d.reference ?? merchantTxRef;
-  const status      = d.status ?? "success";
+  const json = await res.json() as Record<string, unknown>;
+  if (!res.ok) {
+    const errMsg = (json["message"] as string) ?? `Nomba transfer error ${res.status}`;
+    logger.error({ amountKobo, bankCode, accountNumber, status: res.status, body: json }, errMsg);
+    throw new NombaApiError(res.status, errMsg, json);
+  }
+
+  const d = (json["data"] as Record<string, unknown>) ?? {};
+  const transferRef = (d["merchantTxRef"] as string) ?? (d["transferId"] as string) ?? (d["reference"] as string) ?? merchantTxRef;
+  const status      = (d["status"] as string) ?? "pending";
 
   logger.info(
-    { transferRef, status, amountKobo, accountNumber, merchantTxRef },
-    "Bank transfer initiated"
+    { transferRef, status, amountKobo, amountNaira, accountNumber, merchantTxRef },
+    "Bank transfer initiated (v2)"
   );
 
   return { transferRef, status };

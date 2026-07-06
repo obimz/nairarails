@@ -1,8 +1,11 @@
 import { Router, type Router as ExpressRouter } from "express";
 import { prisma } from "../db/client.js";
 import { logger } from "../lib/logger.js";
+import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 
 const router: ExpressRouter = Router();
+
+router.use(apiKeyAuth);
 
 // ─── GET /api/v1/dashboard/overview ──────────────────────────────────────────
 // Aggregates today's order stats in a single set of parallel queries.

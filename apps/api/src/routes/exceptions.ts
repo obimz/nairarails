@@ -6,8 +6,11 @@ import { prisma } from "../db/client.js";
 import { lookupBankAccount, transferToBank } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
 
 const router: ExpressRouter = Router();
+
+router.use(apiKeyAuth);
 
 const ExceptionQuerySchema = z.object({
   type: z.enum(["underpayment", "overpayment", "unmatched"]).optional(),
@@ -131,11 +134,16 @@ router.post("/exceptions/:order_ref/refund-excess", async (req, res, next) => {
       merchantTxRef,
     });
 
-    // Step 3: Mark order as paid (excess returned, net is correct) and log the refund.
+    // Step 3: Log the refund and update order status.
+    // Only mark as "refunded" if Nomba confirmed success; otherwise keep as overpayment
+    // (the transfer.success webhook will confirm later).
+    const refundConfirmed = txStatus.toLowerCase() === "success";
+    const newOrderStatus = refundConfirmed ? "refunded" : "overpayment";
+
     await prisma.$transaction([
       prisma.order.update({
         where: { orderRef: order_ref },
-        data:  { status: "paid" },
+        data:  { status: newOrderStatus },
       }),
       prisma.ledgerEntry.create({
         data: {
@@ -143,14 +151,14 @@ router.post("/exceptions/:order_ref/refund-excess", async (req, res, next) => {
           entryType:  "refund_issued",
           amountKobo: BigInt(-refundKobo), // debit — money leaving
           reference:  transferRef,
-          narration:  `Excess refund to ${order.senderName ?? order.senderAccountNumber}: ${refundKobo} kobo`,
+          narration:  `Excess refund to ${order.senderName ?? order.senderAccountNumber}: ${refundKobo} kobo (${refundConfirmed ? "confirmed" : "pending"})`,
         },
       }),
     ]);
 
     logger.info(
-      { order_ref, refundKobo, transferRef, txStatus },
-      "Refund-excess completed"
+      { order_ref, refundKobo, transferRef, txStatus, refundConfirmed },
+      `Refund-excess ${refundConfirmed ? "completed" : "initiated (pending confirmation)"}`
     );
 
     res.status(200).json({
@@ -158,7 +166,7 @@ router.post("/exceptions/:order_ref/refund-excess", async (req, res, next) => {
       refunded_amount_kobo: refundKobo,
       sender_account:       order.senderAccountNumber,
       sender_bank:          order.senderBankCode,
-      status:               "resolved",
+      status:               refundConfirmed ? "resolved" : "pending",
       nomba_transfer_ref:   transferRef,
     });
   } catch (err) {
