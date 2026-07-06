@@ -52,11 +52,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
       - name: Deploy to Railway
-        uses: railwayapp/deploy-railway@v1
-        with:
-          railway-token: ${{ secrets.RAILWAY_TOKEN }}
-          service: nairarails
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service nairarails --detach
+        working-directory: apps/api
 
   # ─── Deploy Web to Vercel ───────────────────────────────────────────────
   deploy-web:
