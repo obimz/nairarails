@@ -250,12 +250,16 @@ router.post(
               merchantTxRef,
             });
 
+            // Nomba transfers often return PENDING_BILLING initially.
+            // Only mark as "executed" if status confirms success; otherwise "pending".
+            const splitStatus = txStatus.toLowerCase() === "success" ? "executed" : "pending";
+
             // Update split row and append ledger entry in one transaction.
             await prisma.$transaction([
               prisma.split.update({
                 where: { id: splitRow.id },
                 data: {
-                  status:          "executed",
+                  status:          splitStatus,
                   amountKobo:      BigInt(allocation.amount_kobo),
                   nombaTransferRef: transferRef,
                 },
@@ -272,8 +276,8 @@ router.post(
             ]);
 
             logger.info(
-              { orderRef, party: allocation.party, amountKobo: allocation.amount_kobo, transferRef, txStatus },
-              "Split executed"
+              { orderRef, party: allocation.party, amountKobo: allocation.amount_kobo, transferRef, txStatus, splitStatus },
+              `Split ${splitStatus === "executed" ? "executed" : "initiated (pending confirmation)"}`
             );
           } catch (splitErr) {
             // Mark the individual split as failed — don't abort the whole webhook.

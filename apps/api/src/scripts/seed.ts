@@ -15,14 +15,18 @@ async function main() {
     where: { email: "demo@nairarails.dev" },
     update: {
       name: "Demo Marketplace",
-      apiKey: "nrk_live_demo_seed_key",
+      apiKeyHash: "c2457662dc55d20ab5397b0867a2beaff1be87af86e39dedd36cc2014bd545bf",
+      apiKeyPrefix: "nrk_live_demo_seed_k",
       webhookUrl: null,
+      emailVerified: true,
     },
     create: {
       name: "Demo Marketplace",
       email: "demo@nairarails.dev",
-      apiKey: "nrk_live_demo_seed_key",
+      apiKeyHash: "c2457662dc55d20ab5397b0867a2beaff1be87af86e39dedd36cc2014bd545bf",
+      apiKeyPrefix: "nrk_live_demo_seed_k",
       webhookUrl: null,
+      emailVerified: true,
     },
   });
   console.log(`✓ Seed merchant ready: ${seedMerchant.email} (${seedMerchant.id})`);
