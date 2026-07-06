@@ -10,10 +10,12 @@ import {
   NombaWebhookEnvelopeSchema,
   NOMBA_SIGNATURE_HEADER,
   NOMBA_TIMESTAMP_HEADER,
+  NOMBA_SIG_VALUE_HEADER,
 } from "@nairarails/shared-types";
 import { prisma } from "../db/client.js";
 import { lookupBankAccount, transferToBank } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
+import { notifyMerchant } from "../lib/notifyMerchant.js";
 
 const router: ExpressRouter = Router();
 
@@ -36,7 +38,19 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     const rawBody = req.body as Buffer;
 
-    // ── 1. Parse body ─────────────────────────────────────────────────────────
+    // ── 0. Log every inbound hit immediately — before any verification ────────
+    logger.info(
+      {
+        method:        req.method,
+        path:          req.path,
+        ip:            req.ip,
+        contentLength: req.headers["content-length"],
+        hasSignature:  !!(req.headers["nomba-signature"] ?? req.headers["x-nomba-signature"] ?? req.headers["x-sig-value"]),
+        hasTimestamp:  !!(req.headers["nomba-timestamp"] ?? req.headers["x-nomba-timestamp"]),
+        bodyBytes:     Buffer.isBuffer(rawBody) ? rawBody.length : "not-a-buffer",
+      },
+      "Nomba webhook hit received"
+    );
     let envelope: ReturnType<typeof NombaWebhookEnvelopeSchema.parse>;
     try {
       const parsed = JSON.parse(rawBody.toString("utf8")) as unknown;
@@ -61,7 +75,7 @@ router.post(
       return;
     }
 
-    const signatureHeader = req.headers[NOMBA_SIGNATURE_HEADER];
+    const signatureHeader = req.headers[NOMBA_SIGNATURE_HEADER] ?? req.headers[NOMBA_SIG_VALUE_HEADER];
     const timestamp       = req.headers[NOMBA_TIMESTAMP_HEADER];
 
     if (typeof signatureHeader !== "string" || typeof timestamp !== "string") {
@@ -102,7 +116,7 @@ router.post(
         event_type,
         transactionId:         txn.transactionId,
         transactionType:       txn.type,
-        amount_kobo:           txn.transactionAmount,
+        amount_naira:          txn.transactionAmount,  // raw from Nomba — naira, not kobo
         aliasAccountReference: txn.aliasAccountReference,
       },
       "Nomba webhook received"
@@ -159,7 +173,10 @@ router.post(
         return;
       }
 
-      const order = await prisma.order.findUnique({ where: { orderRef } });
+      const order = await prisma.order.findUnique({
+        where:   { orderRef },
+        include: { merchant: true },
+      });
       if (!order) {
         logger.warn({ requestId, orderRef }, "No order found for aliasAccountReference — quarantining");
         res.status(200).json({ status: "unmatched_quarantined", requestId });
@@ -167,7 +184,8 @@ router.post(
       }
 
       const expectedKobo = Number(order.expectedAmountKobo);
-      const receivedKobo = txn.transactionAmount;
+      // Nomba sends transactionAmount in NAIRA — convert to kobo to match our internal unit.
+      const receivedKobo = Math.round(txn.transactionAmount * 100);
 
       const classification = classify(expectedKobo, receivedKobo);
       const shortfall      = shortfallKobo(expectedKobo, receivedKobo);
@@ -295,9 +313,23 @@ router.post(
           }
         }
       }
+
+      // ── 8. Notify the merchant (fire-and-forget) ───────────────────────────
+      // Post a payment.classified event to the merchant's registered webhookUrl.
+      // Never await this in a way that can delay the 200 response to Nomba.
+      // notifyMerchant catches all errors internally — it will never throw.
+      void notifyMerchant(order.merchant, {
+        event:                "payment.classified",
+        order_ref:            orderRef,
+        status:               classification,
+        received_amount_kobo: receivedKobo,
+        expected_amount_kobo: expectedKobo,
+        splits_executed:      classification === "paid" || classification === "overpayment",
+        timestamp:            new Date().toISOString(),
+      });
     }
 
-    // ── 8. Always respond 200 ─────────────────────────────────────────────────
+    // ── 9. Always respond 200 ─────────────────────────────────────────────────
     // Respond 200 once the event is safely recorded — Nomba will not retry.
     res.status(200).json({
       status:        "ok",

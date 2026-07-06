@@ -9,75 +9,147 @@ import {
   Route,
   Routes,
 } from "react-router-dom";
-import { queryClient } from "./lib/queryClient.js";
+import { LayoutDashboard, Receipt, AlertTriangle, Settings, LogOut } from "lucide-react";
+import { queryClient }    from "./lib/queryClient.js";
 import { LandingPage }    from "./pages/LandingPage.js";
-import { OverviewPage }    from "./pages/OverviewPage.js";
-import { OrdersPage }      from "./pages/OrdersPage.js";
-import { ExceptionsPage }  from "./pages/ExceptionsPage.js";
+import { OnboardingPage } from "./pages/OnboardingPage.js";
+import { LoginPage }      from "./pages/LoginPage.js";
+import { OverviewPage }   from "./pages/OverviewPage.js";
+import { OrdersPage }     from "./pages/OrdersPage.js";
+import { ExceptionsPage } from "./pages/ExceptionsPage.js";
+import { ProtectedRoute } from "./components/ProtectedRoute.js";
+import { ThemeProvider }  from "./contexts/ThemeContext.js";
+import { ThemeToggle }    from "./components/ThemeToggle.js";
+import { AdminPage }          from "./pages/AdminPage.js";
+import { DocsPage }           from "./pages/DocsPage.js";
+import { AuthCallbackPage }   from "./pages/AuthCallbackPage.js";
+import { SettingsPage }       from "./pages/SettingsPage.js";
+import { LogoLockup }     from "./components/Logo.js";
+import { supabase }       from "./lib/supabase.js";
 import "./index.css";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
 const NAV_LINKS = [
-  { label: "Overview",   to: "/dashboard/overview" },
-  { label: "Orders",     to: "/dashboard/orders" },
-  { label: "Exceptions", to: "/dashboard/exceptions" },
+  { label: "Overview",   to: "/dashboard/overview",    icon: LayoutDashboard },
+  { label: "Orders",     to: "/dashboard/orders",      icon: Receipt },
+  { label: "Exceptions", to: "/dashboard/exceptions",  icon: AlertTriangle },
+  { label: "Settings",   to: "/dashboard/settings",    icon: Settings },
 ] as const;
 
-// ─── App shell ────────────────────────────────────────────────────────────────
+// ─── Sidebar layout ───────────────────────────────────────────────────────────
 
 function DashboardLayout() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top nav */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center">
-            <span className="text-white text-xs font-bold">₦</span>
-          </div>
-          <span className="font-semibold text-gray-900 text-lg tracking-tight">NairaRails</span>
+    <div className="flex min-h-screen transition-colors duration-300"
+         style={{ background: "var(--bg-base)" }}>
+
+      {/* Sidebar */}
+      <aside
+        className="hidden md:flex flex-col w-60 shrink-0 fixed inset-y-0 left-0 z-30"
+        style={{ background: "var(--bg-surface)", borderRight: "1px solid var(--border)" }}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-2.5 px-5 py-5"
+             style={{ borderBottom: "1px solid var(--border)" }}>
+          <LogoLockup size={28} textSize="text-sm" />
         </div>
 
-        <nav className="flex items-center gap-1" aria-label="Main navigation">
-          {NAV_LINKS.map(({ label, to }) => (
+        {/* Nav links */}
+        <nav className="flex-1 px-3 py-4 space-y-1" aria-label="Dashboard navigation">
+          {NAV_LINKS.map(({ label, to, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
-              className={({ isActive }) => [
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-green-50 text-green-700"
-                  : "text-gray-600 hover:bg-gray-100",
-              ].join(" ")}
+              className={({ isActive }) => isActive ? "nav-link-active" : "nav-link"}
             >
+              <Icon className="w-4 h-4 shrink-0" />
               {label}
             </NavLink>
           ))}
         </nav>
 
-        <div className="text-xs text-gray-400 font-mono hidden sm:block">
-          {import.meta.env["VITE_API_BASE"] ?? "http://localhost:3000"}
+        {/* Bottom actions */}
+        <div className="px-3 py-4 space-y-1" style={{ borderTop: "1px solid var(--border)" }}>
+          <div className="px-3 py-2 text-xs font-mono truncate" style={{ color: "var(--text-muted)" }}>
+            {import.meta.env["VITE_API_BASE"] ?? "localhost:3000"}
+          </div>
+          <div className="px-3 py-2">
+            <ThemeToggle showSystemOption />
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              localStorage.removeItem("nairarails_api_key");
+              await supabase.auth.signOut();
+              window.location.href = "/login";
+            }}
+            className="nav-link w-full text-left hover:text-red-500"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            Sign out
+          </button>
         </div>
-      </header>
+      </aside>
 
-      {/* Page content */}
-      <main className="flex-1">
+      {/* Mobile bottom tab bar */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex"
+        style={{ borderTop: "1px solid var(--border)", background: "var(--bg-surface)" }}
+      >
+        {NAV_LINKS.map(({ label, to, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              [
+                "flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors duration-150",
+                isActive ? "text-[#16A97B]" : "",
+              ].join(" ")
+            }
+            style={({ isActive }) => ({ color: isActive ? "var(--brand)" : "var(--text-muted)" })}
+          >
+            <Icon className="w-5 h-5" />
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* Main content */}
+      <main className="flex-1 md:ml-60 min-h-screen pb-20 md:pb-0">
         <Outlet />
       </main>
     </div>
   );
 }
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
 function AppRoutes() {
   return (
     <Routes>
+      {/* Public */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/signup" element={<OnboardingPage />} />
+      <Route path="/login"  element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="/admin"  element={<AdminPage />} />
+      <Route path="/docs"   element={<DocsPage />} />
 
-      <Route path="/dashboard" element={<DashboardLayout />}>
+      {/* Protected dashboard */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route index element={<Navigate to="/dashboard/overview" replace />} />
-        <Route path="overview" element={<OverviewPage />} />
-        <Route path="orders" element={<OrdersPage />} />
+        <Route path="overview"   element={<OverviewPage />} />
+        <Route path="orders"     element={<OrdersPage />} />
         <Route path="exceptions" element={<ExceptionsPage />} />
+        <Route path="settings"   element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -92,10 +164,12 @@ if (!rootEl) throw new Error("Missing #root element in index.html");
 
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );
