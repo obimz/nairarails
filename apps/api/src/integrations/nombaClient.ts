@@ -157,6 +157,7 @@ function extractVAFields(response: Record<string, unknown>): CreateVirtualAccoun
 
 /**
  * Create a virtual account (NUBAN) for a single order.
+ * POST /accounts/virtual
  * POST /accounts/virtual/{subAccountId}
  *
  * accountRef = order_ref so aliasAccountReference in the webhook maps back

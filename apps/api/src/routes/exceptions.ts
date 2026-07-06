@@ -264,8 +264,8 @@ router.post("/exceptions/:order_ref/refund-shortfall", apiKeyAuth, async (req, r
     ]);
 
     logger.info(
-      { order_ref, refundKobo, transferRef, txStatus },
-      "Refund-shortfall completed"
+      { order_ref, refundKobo, transferRef, txStatus, refundConfirmed },
+      `Refund-excess ${refundConfirmed ? "completed" : "initiated (pending confirmation)"}`
     );
 
     res.status(200).json({
@@ -273,7 +273,7 @@ router.post("/exceptions/:order_ref/refund-shortfall", apiKeyAuth, async (req, r
       refunded_amount_kobo: refundKobo,
       sender_account:       order.senderAccountNumber,
       sender_bank:          order.senderBankCode,
-      status:               "resolved",
+      status:               refundConfirmed ? "resolved" : "pending",
       nomba_transfer_ref:   transferRef,
     });
   } catch (err) {
