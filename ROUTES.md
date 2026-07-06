@@ -1,13 +1,21 @@
-
   Setup
 
-  In Thunder Client, set an Environment called NairaRails with one variable:
+  In Thunder Client, set an Environment called NairaRails with two variables:
 
   baseUrl = http://localhost:3000
+  apiKey  = nrk_live_demo_seed_key
+
+  The seed merchant's key is nrk_live_demo_seed_key — run seed.ts first if the DB is empty:
+    npx tsx --env-file=.env apps/api/src/scripts/seed.ts
+
+  All authenticated routes require:   x-api-key: {{apiKey}}
+  Public routes (no key needed):      GET /health, POST /merchants/signup, POST /webhooks/nomba
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
   Collection: NairaRails API
+
+  ── PUBLIC ROUTES ────────────────────────────────────────────────────────────────────────────────────
 
   1. Health
 
@@ -17,16 +25,47 @@
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  2. Create Order — valid
+  2. Merchant Signup
+
+  POST {{baseUrl}}/api/v1/merchants/signup
+
+  Headers:
+  Content-Type: application/json
+
+  Body (JSON):
+  {
+    "name": "Jumia Foods",
+    "email": "dev@jumiafood.ng",
+    "webhookUrl": "https://webhook.site/your-url-here"
+  }
+
+  Expected: 201 with a prefixed API key (nrk_live_...). Key is shown once — store it immediately.
+  Run again with the same email: expected 409 — DUPLICATE_MERCHANT_EMAIL.
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3. Merchant Profile
+
+  GET {{baseUrl}}/api/v1/merchants/me
+
+  Headers:
+  x-api-key: {{apiKey}}
+
+  Expected: 200 with merchantId, name, email, webhookUrl, createdAt. apiKey field never returned.
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ── ORDER ROUTES (all require x-api-key) ─────────────────────────────────────────────────────────────
+
+  4. Create Order — valid
 
   POST {{baseUrl}}/api/v1/orders
 
   Headers:
-
   Content-Type: application/json
+  x-api-key: {{apiKey}}
 
   Body (JSON):
-
   {
     "order_ref": "ord-001",
     "customer_name": "Chisom Traders",
@@ -39,20 +78,33 @@
     ]
   }
 
-  Expected: 201 with a real virtual_account_number (not "pending"), status: "pending"
+  Expected: 201 with a real virtual_account_number (NUBAN), status: "pending"
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  3. Create Order — splits don't sum to 100
+  5. Create Order — no API key (auth test)
 
   POST {{baseUrl}}/api/v1/orders
 
   Headers:
-
   Content-Type: application/json
+  (no x-api-key header)
+
+  Body: same as #4
+
+  Expected: 401 — MISSING_API_KEY. Proves the auth gate is live.
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6. Create Order — splits don't sum to 100
+
+  POST {{baseUrl}}/api/v1/orders
+
+  Headers:
+  Content-Type: application/json
+  x-api-key: {{apiKey}}
 
   Body (JSON):
-
   {
     "order_ref": "ord-bad-splits",
     "customer_name": "Test",
@@ -67,61 +119,77 @@
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  4. Create Order — duplicate order_ref
+  7. Create Order — duplicate order_ref
 
   POST {{baseUrl}}/api/v1/orders
 
-  Same body as request #2 ("order_ref": "ord-001"). Run after #2 has already succeeded.
+  Headers:
+  Content-Type: application/json
+  x-api-key: {{apiKey}}
+
+  Same body as #4 ("order_ref": "ord-001"). Run after #4 has succeeded.
 
   Expected: 409 — DUPLICATE_ORDER_REF
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  5. List Orders
+  8. List Orders
 
   GET {{baseUrl}}/api/v1/orders
 
-  No body. Expected: 200 with ord-001 in results, real NUBAN, status: "pending".
+  Headers:
+  x-api-key: {{apiKey}}
+
+  Expected: 200, results scoped to the calling merchant only. ord-001 visible with real NUBAN.
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  6. List Orders — filtered by status
+  9. List Orders — filtered by status
 
   GET {{baseUrl}}/api/v1/orders?status=pending
 
-  Expected: same as above, only pending orders returned.
+  Headers:
+  x-api-key: {{apiKey}}
+
+  Expected: only pending orders for this merchant returned.
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  7. Reconciliation Detail — found
+  10. Reconciliation Detail — found
 
   GET {{baseUrl}}/api/v1/orders/ord-001/reconciliation
 
-  Expected: 200, received_amount_kobo: null, splits_executed: false, three split rows all "status":
-  "pending", audit trail has one entry va_created.
+  Headers:
+  x-api-key: {{apiKey}}
+
+  Expected: 200, received_amount_kobo: null, splits_executed: false, three split rows all
+  "status": "pending", audit trail has one entry va_created.
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  8. Reconciliation Detail — not found
+  11. Reconciliation Detail — not found
 
   GET {{baseUrl}}/api/v1/orders/does-not-exist/reconciliation
+
+  Headers:
+  x-api-key: {{apiKey}}
 
   Expected: 404 — ORDER_NOT_FOUND
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  9. Webhook — bad signature (reject test)
+  ── WEBHOOK ROUTES (public — authenticated by Nomba HMAC signature) ──────────────────────────────────
+
+  12. Webhook — bad signature (reject test)
 
   POST {{baseUrl}}/api/v1/webhooks/nomba
 
   Headers:
-
   Content-Type: application/json
   nomba-signature: thisisafakesignature
   nomba-timestamp: 2026-07-01T00:00:00Z
 
   Body (JSON):
-
   {
     "requestId": "req-sig-test-001",
     "event_type": "payment_success",
@@ -138,63 +206,90 @@
     }
   }
 
-  Expected: 401 — INVALID_WEBHOOK_SIGNATURE. This proves signature verification is live and rejecting
-  forgeries.
+  Expected: 401 — INVALID_WEBHOOK_SIGNATURE
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  10. Webhook — wrong shape (ignored gracefully)
+  13. Webhook — wrong shape (ignored gracefully)
 
   POST {{baseUrl}}/api/v1/webhooks/nomba
 
   Headers:
-
   Content-Type: application/json
   nomba-signature: anything
   nomba-timestamp: 2026-07-01T00:00:00Z
 
-  Body (JSON):
+  Body (JSON): { "garbage": true }
 
-  { "garbage": true }
-
-  Expected: 200 — {"status":"ignored","reason":"unrecognised_shape"}. Nomba must not be able to crash
-  your handler with a malformed payload.
+  Expected: 200 — {"status":"ignored","reason":"unrecognised_shape"}
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  11. Exceptions — all
+  ── EXCEPTIONS ROUTES (all require x-api-key) ────────────────────────────────────────────────────────
+
+  14. Exceptions — all
 
   GET {{baseUrl}}/api/v1/exceptions
 
-  Expected: 200, empty results until a real webhook fires. After a real payment, shows
-  underpayments/overpayments.
+  Headers:
+  x-api-key: {{apiKey}}
+
+  Expected: 200, results scoped to calling merchant. Empty until a real webhook fires.
+  After seed.ts: shows DEMO-001 (underpayment), DEMO-002 (overpayment), DEMO-005 (unmatched).
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  12. Exceptions — filtered
+  15. Exceptions — filtered
 
   GET {{baseUrl}}/api/v1/exceptions?type=overpayment
 
-  Expected: 200, filtered results.
+  Headers:
+  x-api-key: {{apiKey}}
+
+  Expected: 200, overpayment orders only for this merchant.
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  13. Refund Excess — no overpayment yet
+  16. Refund Excess — validation gate (no overpayment yet)
 
   POST {{baseUrl}}/api/v1/exceptions/ord-001/refund-excess
 
+  Headers:
+  x-api-key: {{apiKey}}
+
   No body needed.
 
-  Expected: 422 — order is not an overpayment (it's still pending). This proves the validation gate
-  works before any real Nomba transfer is attempted.
+  Expected: 422 — order is not an overpayment (it's still pending). Proves the validation gate
+  fires before any Nomba transfer is attempted.
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  14. Dashboard Overview
+  17. Refund Excess — live (after a real overpayment webhook)
+
+  POST {{baseUrl}}/api/v1/exceptions/DEMO-002/refund-excess
+
+  Headers:
+  x-api-key: {{apiKey}}
+
+  No body needed.
+
+  Expected: 200 with nomba_transfer_ref, order status updated to "paid".
+  (DEMO-002 from seed.ts is a pre-seeded overpayment with sender details captured.)
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ── DASHBOARD ROUTES (all require x-api-key) ─────────────────────────────────────────────────────────
+
+  18. Dashboard Overview
 
   GET {{baseUrl}}/api/v1/dashboard/overview
 
-  Expected: 200, real counts from the DB (not hardcoded). orders_pending: 1 after creating ord-001.
+  Headers:
+  x-api-key: {{apiKey}}
+
+  Expected: 200, real counts from the DB scoped to calling merchant.
+  After seed.ts: orders_paid: 1, orders_pending: 1, orders_underpayment: 1,
+  orders_overpayment: 1, exceptions_open: 3.
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -202,40 +297,49 @@
 
   Once you send a real payment to the NUBAN from the Nomba sandbox and the webhook arrives, re-run:
 
-  - #5 List Orders — ord-001 should now show status: "paid" (or underpayment/overpayment)
-  - #7 Reconciliation — received_amount_kobo populated, split rows updated, audit trail has
-  payment_received + classified entries
-  - #11 Exceptions — populated if the payment was off
-  - #14 Dashboard — counts updated
+  - #8  List Orders — ord-001 should now show status: "paid" (or underpayment/overpayment)
+  - #10 Reconciliation — received_amount_kobo populated, split rows updated, audit trail has
+       payment_received entries
+  - #14 Exceptions — populated if the payment was off
+  - #18 Dashboard — counts updated
 
-  For an overpayment, #13 Refund Excess will now succeed and return a real nomba_transfer_ref.
+  For an overpayment, #17 Refund Excess will succeed and return a real nomba_transfer_ref.
+
+  To generate a valid webhook signature for manual testing, run:
+    node --env-file=.env gen-sig.mjs
 
   ────────────────────────────────────────────────────────────────────────────────────────────────────
 
   What to look for
 
-  ┌───────────────────────────────┬────────────────────────────────────────────────────┐
-  │ Request                       │ Pass condition                                     │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #1 Health                     │ 200 healthy                                        │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #2 Create Order               │ Real NUBAN in response, row in Supabase            │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #3 Bad splits                 │ 422                                                │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #4 Duplicate ref              │ 409                                                │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #5–6 List                     │ ord-001 visible, filterable                        │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #7 Reconciliation             │ Null received, pending splits, va_created in trail │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #8 Not found                  │ 404                                                │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #9 Bad sig                    │ 401 — most important security check                │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #10 Bad shape                 │ 200 ignored — not a crash                          │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #13 Refund on non-overpayment │ 422                                                │
-  ├───────────────────────────────┼────────────────────────────────────────────────────┤
-  │ #14 Dashboard                 │ Real DB counts                                     │
-  └───────────────────────────────┴────────────────────────────────────────────────────┘
+  ┌───────────────────────────────────┬──────────────────────────────────────────────────────┐
+  │ Request                           │ Pass condition                                       │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #1  Health                        │ 200 healthy                                          │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #2  Merchant Signup               │ 201 with nrk_live_... key; 409 on duplicate email    │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #3  Merchant Me                   │ 200 profile, no apiKey field in response             │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #4  Create Order                  │ 201, real NUBAN, row in Supabase                     │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #5  Create Order — no key         │ 401 MISSING_API_KEY                                  │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #6  Bad splits                    │ 422                                                  │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #7  Duplicate ref                 │ 409                                                  │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #8–9  List / filter               │ ord-001 visible, scoped to merchant, filterable       │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #10 Reconciliation                │ Null received, pending splits, va_created in trail   │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #11 Not found                     │ 404                                                  │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #12 Bad sig                       │ 401 — most important security check                  │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #13 Bad shape                     │ 200 ignored — not a crash                            │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #16 Refund on non-overpayment     │ 422                                                  │
+  ├───────────────────────────────────┼──────────────────────────────────────────────────────┤
+  │ #18 Dashboard                     │ Real DB counts scoped to merchant                    │
+  └───────────────────────────────────┴──────────────────────────────────────────────────────┘

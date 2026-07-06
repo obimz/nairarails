@@ -299,13 +299,18 @@ A second live run demonstrates an underpayment (shortfall held and flagged) and 
 ```
 nairarails/
 ├── apps/
-│   ├── web/                  # React + Vite dashboard
-│   │   └── src/pages/        # Orders, Exceptions, Overview
+│   ├── web/                  # React + Vite dashboard + landing page
+│   │   └── src/
+│   │       ├── pages/        # LandingPage, OnboardingPage, Orders, Exceptions, Overview
+│   │       ├── components/   # ProtectedRoute, HeroNetworkScene, StatusBadge
+│   │       └── lib/          # apiFetch (x-api-key injection), money, queryClient
 │   └── api/                  # Express backend
-│       ├── src/routes/       # orders, webhooks, exceptions, dashboard
-│       ├── src/middleware/   # validation, error handling, CORS
-│       ├── src/db/           # Drizzle schema + Supabase connection
-│       └── src/integrations/ # nombaClient.ts — all outbound Nomba calls
+│       ├── src/routes/       # orders, webhooks, exceptions, dashboard, merchants
+│       ├── src/middleware/   # apiKeyAuth, validate, errorHandler, CORS
+│       ├── src/lib/          # notifyMerchant, logger
+│       ├── src/db/           # Prisma schema + Supabase connection
+│       ├── src/integrations/ # nombaClient.ts — all outbound Nomba calls
+│       └── src/scripts/      # seed.ts — demo data for dashboard
 ├── packages/
 │   ├── shared-types/         # Zod schemas — the API contract, as code
 │   └── webhook-core/         # Pure signature verification + reconciler + split math
@@ -316,6 +321,55 @@ nairarails/
 ```
 
 Full structure rationale lives in the implementation guides — notably why webhook *logic* lives in `packages/webhook-core` (pure, unit-testable) while the webhook *route* lives in `apps/api` (the actual HTTP listener).
+
+---
+
+## Second Cycle Additions
+
+The second cycle transformed NairaRails from a working demo into a believable product.
+
+### Landing Page (`/`)
+3D animated React page powered by Three.js + GSAP. Includes a network animation of bank nodes with payment pulses, problem framing with the ₦35.56B reconciliation loss figure, a how-it-works walkthrough, and a "Get API Access" CTA leading to merchant onboarding.
+
+Degrades gracefully — users with `prefers-reduced-motion` or viewport width below 768px see a static fallback with no crash.
+
+### Merchant Onboarding (`/signup`)
+Self-serve signup: marketplace name, email, and optional webhook URL. On success, an `nrk_live_*` prefixed API key is issued **once** and shown in a copy-to-clipboard box. The key is stored in `localStorage` and injected into every subsequent API request.
+
+```http
+POST /api/v1/merchants/signup
+```
+```json
+{ "name": "Jumia Foods", "email": "dev@jumiafood.ng", "webhookUrl": "https://jumiafood.ng/webhooks/nairarails" }
+```
+
+### API Key Authentication
+Every marketplace-facing route now requires an `x-api-key` header. Each merchant sees only their own orders, exceptions, and dashboard stats.
+
+```http
+GET /api/v1/orders
+x-api-key: nrk_live_...
+```
+
+Routes that remain public: `POST /merchants/signup`, `POST /webhooks/nomba`, `GET /health`.
+
+### Outbound Merchant Webhooks
+After each payment is classified, NairaRails POSTs a `payment.classified` event to the merchant's registered `webhookUrl`. Fire-and-forget — a failed delivery never crashes the inbound webhook handler or delays Nomba's `200`.
+
+```json
+{
+  "event": "payment.classified",
+  "order_ref": "ord-001",
+  "status": "paid",
+  "received_amount_kobo": 500000,
+  "expected_amount_kobo": 500000,
+  "splits_executed": true,
+  "timestamp": "2026-07-03T10:00:00Z"
+}
+```
+
+### Protected Dashboard
+The dashboard now requires a valid API key in `localStorage`. Navigating to `/dashboard` without one redirects to `/signup`. A Sign out button clears the key and returns to signup.
 
 ---
 
@@ -334,14 +388,31 @@ pnpm dev  # runs apps/web and apps/api together via Turborepo
 
 **Required environment variables:**
 ```env
-NOMBA_BASE_URL=https://sandbox.api.nomba.com/v1
+NOMBA_BASE_URL=https://api.nomba.com/v1
 NOMBA_CLIENT_ID=
 NOMBA_CLIENT_SECRET=
-NOMBA_ACCOUNT_ID=
+NOMBA_ACCOUNT_ID=        # parent account ID — sent in the accountId header on every request
+NOMBA_SUB_ACCOUNT_ID=    # sub-account ID — used as path param in /accounts/virtual/{subAccountId}
+                         # webhooks only fire when virtual accounts are created via the subaccount
+                         # route; the generic /accounts/virtual endpoint provisions the account
+                         # but Nomba never delivers webhook events for it
 NOMBA_WEBHOOK_SECRET=
 DATABASE_URL=
-VITE_API_BASE=http://localhost:3000/api/v1
+DIRECT_URL=
+VITE_API_BASE=http://localhost:3000
 ```
+
+**Optional (demo / seed):**
+```env
+# Set to a webhook.site URL to observe outbound payment notifications during a live demo
+DEMO_MERCHANT_WEBHOOK_URL=
+```
+
+To seed demo data (5 orders across all payment states):
+```bash
+npx tsx --env-file=.env apps/api/src/scripts/seed.ts
+```
+Use API key `nrk_live_demo_seed_key` in the `x-api-key` header to authenticate as the demo merchant.
 
 ---
 
@@ -357,9 +428,11 @@ VITE_API_BASE=http://localhost:3000/api/v1
 
 ## Explicitly Out of Scope (Stated, Not Hidden)
 
-- Multi-tenant auth / login — single hardcoded merchant context for the demo
+- Password-based login / session management — API key is the credential; localStorage is used intentionally for hackathon simplicity (production would use a secure HttpOnly session)
+- API key rotation / revocation endpoint
 - Sub-accounts / persistent per-seller balances — settlement is per-order, not an accumulating balance, so there's no balance for a sub-account to hold
 - Background job queue for webhook processing — handled synchronously, correct at hackathon transaction volume
+- Retry queue for failed outbound merchant webhooks — best-effort delivery, logged on failure
 - Real BVN/KYC verification
 - Scheduled nightly reconciliation job — the reconciliation-backstop logic exists and is callable on demand against Nomba's Transactions API, but isn't wired to a cron scheduler
 

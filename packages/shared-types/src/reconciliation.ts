@@ -13,6 +13,8 @@ export const OrderStatusEnum = z.enum([
   "underpayment", // Received less than expected; splits blocked.
   "overpayment",  // Received more than expected; excess queued for refund.
   "unmatched",    // Payment arrived but no matching order_ref was found.
+  "expired",      // VA expired with no payment — terminal state.
+  "refunded",     // Full or partial refund issued; order closed.
 ]);
 
 export type OrderStatus = z.infer<typeof OrderStatusEnum>;
