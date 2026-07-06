@@ -36,7 +36,11 @@ function createRedisStore(prefix: string): RedisStore | undefined {
   if (!redisClient) return undefined;
 
   return new RedisStore({
-    sendCommand: (...args: string[]) => redisClient!.call(...args) as Promise<any>,
+    sendCommand: async (...args: string[]) => {
+      const [command, ...rest] = args;
+      if (!command) throw new Error("Redis command cannot be empty");
+      return redisClient!.call(command as string, ...rest) as Promise<any>;
+    },
     prefix,
   });
 }
@@ -44,12 +48,13 @@ function createRedisStore(prefix: string): RedisStore | undefined {
 // ─── Auth Routes Limiter ──────────────────────────────────────────────────────
 // Strict limit for /auth/register and /auth/login to prevent credential stuffing.
 
+const authStore = createRedisStore("rl:auth:");
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // 10 requests per window per IP
   standardHeaders: true,
   legacyHeaders: false,
-  store: createRedisStore("rl:auth:"),
+  ...(authStore ? { store: authStore } : {}),
   handler: (_req, res) => {
     logger.warn({ path: _req.path }, "Rate limit exceeded");
     res.status(429).json({
@@ -64,6 +69,7 @@ export const authLimiter = rateLimit({
 // ─── API Routes Limiter ───────────────────────────────────────────────────────
 // Per-API-key limit for authenticated routes (orders, exceptions, dashboard).
 
+const apiStore = createRedisStore("rl:api:");
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 100, // 100 requests per minute per API key
@@ -76,7 +82,7 @@ export const apiLimiter = rateLimit({
     }
     return `ip:${req.ip ?? "unknown"}`;
   },
-  store: createRedisStore("rl:api:"),
+  ...(apiStore ? { store: apiStore } : {}),
   handler: (_req, res) => {
     logger.warn({ path: _req.path }, "Rate limit exceeded");
     res.status(429).json({
@@ -91,12 +97,13 @@ export const apiLimiter = rateLimit({
 // ─── Global Limiter ───────────────────────────────────────────────────────────
 // Catch-all for all other routes (health, public docs, etc).
 
+const globalStore = createRedisStore("rl:global:");
 export const globalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 200, // 200 requests per minute per IP
   standardHeaders: true,
   legacyHeaders: false,
-  store: createRedisStore("rl:global:"),
+  ...(globalStore ? { store: globalStore } : {}),
   handler: (_req, res) => {
     logger.warn({ path: _req.path }, "Rate limit exceeded");
     res.status(429).json({

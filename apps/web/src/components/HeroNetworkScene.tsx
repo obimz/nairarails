@@ -11,8 +11,10 @@
  */
 
 import React from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Html, Line } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Line } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import * as THREE from "three";
 import type { Mesh, Group } from "three";
 
 type Vec3 = [number, number, number];
