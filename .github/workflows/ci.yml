@@ -58,10 +58,10 @@ jobs:
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service api
+        run: railway up --service nairarails
         working-directory: apps/api
 
-  # ─── Deploy Web to Vercel ─────────────────────────────────────────────────
+  # ─── Deploy Web to Vercel ───────────────────────────────────────────────
   deploy-web:
     name: Deploy Web (Vercel)
     runs-on: ubuntu-latest
