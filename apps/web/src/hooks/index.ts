@@ -78,15 +78,32 @@ export interface ExceptionListResponse {
   total_count: number;
 }
 
+export type DashboardRange = "7d" | "30d" | "all";
+
 export interface DashboardOverview {
-  date:                       string;
-  total_expected_today_kobo:  number;
-  total_received_today_kobo:  number;
-  orders_paid:                number;
-  orders_pending:             number;
-  orders_underpayment:        number;
-  orders_overpayment:         number;
-  exceptions_open:            number;
+  range:                  DashboardRange;
+  range_start:            string | null; // null when range === "all"
+  total_expected_kobo:    number;
+  total_received_kobo:    number;
+  orders_paid:            number;
+  orders_pending:         number;
+  orders_underpayment:    number;
+  orders_overpayment:     number;
+  exceptions_open:        number;
+}
+
+export interface DailySeriesRow {
+  date:                string; // "YYYY-MM-DD"
+  paid:                number;
+  pending:             number;
+  underpayment:        number;
+  overpayment:         number;
+  total_received_kobo: number;
+}
+
+export interface DailySeriesResponse {
+  range:  "7d" | "30d";
+  series: DailySeriesRow[];
 }
 
 export interface RefundExcessResponse {
@@ -104,7 +121,8 @@ export const QUERY_KEYS = {
   orders:           (status?: string) => status ? ["orders", status] : ["orders"],
   reconciliation:   (orderRef: string) => ["reconciliation", orderRef],
   exceptions:       (type?: string)   => type ? ["exceptions", type] : ["exceptions"],
-  dashboard:        () => ["dashboard"],
+  dashboard:        (range?: DashboardRange) => range ? ["dashboard", range] : ["dashboard"],
+  dailySeries:      (range: "7d" | "30d") => ["dashboard-series", range],
 } as const;
 
 // ─── useOrders ───────────────────────────────────────────────────────────────
@@ -141,11 +159,20 @@ export function useExceptions(type?: ExceptionType) {
 }
 
 // ─── useDashboard ────────────────────────────────────────────────────────────
-export function useDashboard() {
+export function useDashboard(range: DashboardRange = "7d") {
   return useQuery<DashboardOverview>({
-    queryKey: QUERY_KEYS.dashboard(),
-    queryFn:  () => apiGet<DashboardOverview>("/api/v1/dashboard/overview"),
+    queryKey: QUERY_KEYS.dashboard(range),
+    queryFn:  () => apiGet<DashboardOverview>(`/api/v1/dashboard/overview?range=${range}`),
     refetchInterval: 15_000,
+  });
+}
+
+// ─── useDailySeries ──────────────────────────────────────────────────────────
+export function useDailySeries(range: "7d" | "30d" = "7d") {
+  return useQuery<DailySeriesResponse>({
+    queryKey: QUERY_KEYS.dailySeries(range),
+    queryFn:  () => apiGet<DailySeriesResponse>(`/api/v1/dashboard/daily-series?range=${range}`),
+    refetchInterval: 30_000,
   });
 }
 
@@ -157,9 +184,10 @@ export function useRefundExcess() {
       apiPost<RefundExcessResponse>(`/api/v1/exceptions/${encodeURIComponent(orderRef)}/refund-excess`),
     onSuccess: () => {
       // Invalidate everything that could reflect the resolved exception
-      void qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptions() });
-      void qc.invalidateQueries({ queryKey: QUERY_KEYS.orders() });
-      void qc.invalidateQueries({ queryKey: QUERY_KEYS.dashboard() });
+      void qc.invalidateQueries({ queryKey: ["exceptions"] });
+      void qc.invalidateQueries({ queryKey: ["orders"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard-series"] });
     },
   });
 }
@@ -171,9 +199,10 @@ export function useRefundShortfall() {
     mutationFn: (orderRef: string) =>
       apiPost<RefundExcessResponse>(`/api/v1/exceptions/${encodeURIComponent(orderRef)}/refund-shortfall`),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: QUERY_KEYS.exceptions() });
-      void qc.invalidateQueries({ queryKey: QUERY_KEYS.orders() });
-      void qc.invalidateQueries({ queryKey: QUERY_KEYS.dashboard() });
+      void qc.invalidateQueries({ queryKey: ["exceptions"] });
+      void qc.invalidateQueries({ queryKey: ["orders"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard-series"] });
     },
   });
 }

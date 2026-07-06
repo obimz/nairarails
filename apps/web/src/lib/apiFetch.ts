@@ -1,51 +1,50 @@
 /**
  * apiFetch — the single fetch wrapper for all API calls.
  *
- * Auth strategy (post Phase E):
- *   - Dashboard routes (/api/v1/auth/*, /api/v1/merchants/keys/*, /api/v1/dashboard/*)
- *     → attach Supabase session JWT as `Authorization: Bearer <token>`
- *   - Programmatic routes (/api/v1/orders, /api/v1/exceptions, etc.)
- *     → attach `x-api-key` from localStorage (backwards compat for demo seed key)
- *   - Public routes (register, login, webhooks) → no auth header
+ * Auth strategy:
+ *   Public routes  → no credential header
+ *   All other routes → session-first resolution:
+ *     1. Active Supabase JWT  → Authorization: Bearer <token>
+ *        Works on any device; no localStorage dependency.
+ *        The backend's authAny middleware accepts this on every protected route.
+ *     2. No session, but localStorage API key present → x-api-key header
+ *        Backwards-compatible path for CI callers and the demo seed key.
+ *     3. Neither → no header (request will get 401 from the backend, which is correct)
+ *
+ * Why session-first instead of path-based routing:
+ *   A logged-in user on a new device has a valid Supabase session but no
+ *   localStorage key (it never left the browser that originally issued it).
+ *   Attaching the JWT solves cross-device access without requiring the server
+ *   to ever expose a key's plaintext again.
  */
 
 import { supabase } from "./supabase.js";
 
 const API_BASE = import.meta.env["VITE_API_BASE"] as string | undefined ?? "http://localhost:3000";
 
-// Routes that use JWT (Supabase session) instead of x-api-key
-const JWT_PATHS = [
-  "/api/v1/auth/logout",
-  "/api/v1/auth/me",
-  "/api/v1/merchants/keys",   // GET key info + POST issue/rotate/revoke
-  "/api/v1/merchants/profile", // PATCH profile
-  "/api/v1/dashboard",
-];
-
-// Routes that require no auth header at all
+// Routes that bypass auth entirely — no credential header attached.
 const PUBLIC_PATHS = [
   "/api/v1/auth/register",
   "/api/v1/auth/login",
   "/api/v1/webhooks/nomba",
-  "/api/v1/merchants/signup", // legacy — kept for seed key compat
+  "/api/v1/merchants/signup", // legacy — kept for demo seed key compat
 ];
 
 async function getAuthHeader(path: string): Promise<Record<string, string>> {
-  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
-  if (isPublic) return {};
+  // Public routes need no credential.
+  if (PUBLIC_PATHS.some((p) => path.startsWith(p))) return {};
 
-  const isJwt = JWT_PATHS.some((p) => path.startsWith(p));
-  if (isJwt) {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (token) return { "Authorization": `Bearer ${token}` };
-    return {};
-  }
+  // Prefer an active Supabase session — works on any device, no localStorage needed.
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (token) return { "Authorization": `Bearer ${token}` };
 
-  // Programmatic route — use x-api-key from localStorage
+  // Fallback: static API key from localStorage (CI callers, demo seed key).
   const key = localStorage.getItem("nairarails_api_key");
-  if (!key) return {};
-  return { "x-api-key": key };
+  if (key) return { "x-api-key": key };
+
+  // No credential available — return empty and let the backend reject with 401.
+  return {};
 }
 
 // ─── Error class ─────────────────────────────────────────────────────────────

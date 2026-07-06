@@ -6,11 +6,11 @@ import { prisma } from "../db/client.js";
 import { lookupBankAccount, transferToBank } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
 import { AppError } from "../middleware/errorHandler.js";
-import { apiKeyAuth } from "../middleware/apiKeyAuth.js";
+import { authAny } from "../middleware/authAny.js";
 
 const router: ExpressRouter = Router();
 
-router.use(apiKeyAuth);
+router.use(authAny);
 
 const ExceptionQuerySchema = z.object({
   type: z.enum(["underpayment", "overpayment", "unmatched"]).optional(),
