@@ -48,3 +48,6 @@ CLAUDE.md
 
 .env
 .claude
+RATE_LIMITING.md
+TSCONFIG_EXPLAINED.md
+SCAN_REPORT.md
