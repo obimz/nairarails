@@ -12,7 +12,8 @@ import React from "react";
 import {
   MessageCircle, X, Send, Bot, User,
   AlertTriangle, CheckCircle2, Loader2, ChevronDown,
-  Ticket, Clock, RefreshCw,
+  Ticket, Clock, RefreshCw, Wrench, ChevronRight,
+  BarChart2, List, Search, FileText, Activity, Info, Reply,
 } from "lucide-react";
 import { apiFetch } from "../lib/apiFetch.js";
 
@@ -102,18 +103,83 @@ function renderMarkdown(text: string): React.ReactNode {
   return <div className="space-y-0.5">{nodes}</div>;
 }
 
+// ─── Tool call badge ──────────────────────────────────────────────────────────
+// Shows which tools the AI invoked, collapsible.
+
+const TOOL_LABELS: Record<string, { label: string; icon: React.ElementType<{ className?: string }> }> = {
+  get_dashboard_overview:      { label: "Dashboard overview",     icon: BarChart2  },
+  list_orders:                 { label: "Listed orders",          icon: List       },
+  get_order_detail:            { label: "Order detail",           icon: Search     },
+  get_exceptions:              { label: "Exceptions queue",       icon: AlertTriangle },
+  generate_collection_report:  { label: "Collection report",      icon: FileText   },
+  get_recent_transactions:     { label: "Recent transactions",    icon: Activity   },
+  get_merchant_info:           { label: "Account info",           icon: Info       },
+};
+
+function ToolCallBadges({ toolCalls }: { toolCalls: Array<{ tool: string; result: unknown }> }) {
+  const [expanded, setExpanded] = React.useState(false);
+  if (!toolCalls.length) return null;
+
+  return (
+    <div className="mt-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+      <button
+        type="button"
+        onClick={() => setExpanded((x) => !x)}
+        className="flex items-center gap-1.5 text-[10px] cursor-pointer transition-opacity hover:opacity-70"
+        style={{ color: "rgba(100,116,139,0.7)" }}
+      >
+        <Wrench className="w-2.5 h-2.5" />
+        {toolCalls.length} tool{toolCalls.length > 1 ? "s" : ""} used
+        <ChevronRight
+          className="w-2.5 h-2.5 transition-transform"
+          style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
+        />
+      </button>
+      {expanded && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {toolCalls.map((tc, i) => {
+            const meta = TOOL_LABELS[tc.tool] ?? { label: tc.tool, icon: Wrench };
+            const Icon = meta.icon;
+            return (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-medium"
+                style={{
+                  background: "rgba(22,169,123,0.08)",
+                  border:     "1px solid rgba(22,169,123,0.15)",
+                  color:      "rgba(22,169,123,0.8)",
+                }}
+              >
+                <Icon className="w-2 h-2" />
+                {meta.label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface ToolCall {
+  tool:   string;
+  result: unknown;
+}
+
 interface Message {
-  role:      "user" | "assistant" | "system";
-  content:   string;
+  role:       "user" | "assistant" | "system";
+  content:    string;
   escalated?: boolean;
+  toolCalls?: ToolCall[];
 }
 
 interface ChatResponse {
   reply:     string;
   escalated: boolean;
   reason?:   string;
+  toolCalls?: ToolCall[];
 }
 
 interface SupportTicket {
@@ -125,14 +191,22 @@ interface SupportTicket {
   updated_at: string;
 }
 
+interface ReplyTicketResponse {
+  ok: boolean;
+}
+
 type Tab = "chat" | "tickets";
 
 // ─── Ticket list ──────────────────────────────────────────────────────────────
 
 function TicketList() {
-  const [tickets, setTickets]   = React.useState<SupportTicket[] | null>(null);
-  const [loading, setLoading]   = React.useState(false);
-  const [error, setError]       = React.useState("");
+  const [tickets, setTickets]         = React.useState<SupportTicket[] | null>(null);
+  const [loading, setLoading]         = React.useState(false);
+  const [error, setError]             = React.useState("");
+  const [expandedId, setExpandedId]   = React.useState<number | null>(null);
+  const [replyText, setReplyText]     = React.useState<Record<number, string>>({});
+  const [replying, setReplying]       = React.useState<number | null>(null);
+  const [replyError, setReplyError]   = React.useState<Record<number, string>>({});
 
   async function load() {
     setLoading(true); setError("");
@@ -143,6 +217,28 @@ function TicketList() {
       setError(e instanceof Error ? e.message : "Failed to load tickets");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function sendReply(ticketId: number) {
+    const text = (replyText[ticketId] ?? "").trim();
+    if (!text) return;
+    setReplying(ticketId);
+    setReplyError((prev) => ({ ...prev, [ticketId]: "" }));
+    try {
+      await apiFetch<ReplyTicketResponse>(`/api/v1/support/tickets/${ticketId}/reply`, {
+        method: "POST",
+        body:   JSON.stringify({ message: text }),
+      });
+      setReplyText((prev) => ({ ...prev, [ticketId]: "" }));
+      await load(); // refresh to show updated ticket
+    } catch (e) {
+      setReplyError((prev) => ({
+        ...prev,
+        [ticketId]: e instanceof Error ? e.message : "Failed to send reply",
+      }));
+    } finally {
+      setReplying(null);
     }
   }
 
@@ -195,47 +291,113 @@ function TicketList() {
         </button>
       </div>
 
-      {tickets.map((t) => (
-        <div
-          key={t.id}
-          className="rounded-xl p-3"
-          style={{
-            background: t.status === "open"
-              ? "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.03) 100%)"
-              : "rgba(255,255,255,0.03)",
-            border: `1px solid ${t.status === "open" ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.07)"}`,
-          }}
-        >
-          {/* Status + date */}
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <span
-              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{
-                background: t.status === "open" ? "rgba(245,158,11,0.15)" : "rgba(22,169,123,0.12)",
-                color: t.status === "open" ? "#f59e0b" : "#16A97B",
-              }}
+      {tickets.map((t) => {
+        const isExpanded = expandedId === t.id;
+        return (
+          <div
+            key={t.id}
+            className="rounded-xl overflow-hidden"
+            style={{
+              background: t.status === "open"
+                ? "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.03) 100%)"
+                : "rgba(255,255,255,0.03)",
+              border: `1px solid ${t.status === "open" ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.07)"}`,
+            }}
+          >
+            {/* Header row — click to expand */}
+            <button
+              type="button"
+              onClick={() => setExpandedId(isExpanded ? null : t.id)}
+              className="w-full text-left px-3 pt-3 pb-2 cursor-pointer"
             >
-              {t.status === "open" ? "Open" : "Resolved"}
-            </span>
-            <span className="text-[10px] flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-              <Clock className="w-2.5 h-2.5" />
-              {new Date(t.created_at).toLocaleDateString("en-NG", { day: "2-digit", month: "short" })}
-            </span>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span
+                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                  style={{
+                    background: t.status === "open" ? "rgba(245,158,11,0.15)" : "rgba(22,169,123,0.12)",
+                    color: t.status === "open" ? "#f59e0b" : "#16A97B",
+                  }}
+                >
+                  {t.status === "open" ? "Open" : "Resolved"}
+                </span>
+                <span className="text-[10px] flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                  <Clock className="w-2.5 h-2.5" />
+                  {new Date(t.created_at).toLocaleDateString("en-NG", { day: "2-digit", month: "short" })}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--text-primary)" }}>
+                {t.summary}
+              </p>
+            </button>
+
+            {/* Resolution note */}
+            {t.resolution && (
+              <div className="mx-3 mb-2 px-2.5 py-2 rounded-lg text-xs"
+                   style={{ background: "rgba(22,169,123,0.08)", border: "1px solid rgba(22,169,123,0.15)", color: "rgba(22,169,123,0.9)" }}>
+                <span className="font-semibold">Team reply: </span>{t.resolution}
+              </div>
+            )}
+
+            {/* Reply area — open tickets only */}
+            {t.status === "open" && (
+              <div className="px-3 pb-3">
+                {/* Toggle reply box */}
+                {!isExpanded ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(t.id)}
+                    className="flex items-center gap-1 text-[10px] cursor-pointer transition-opacity hover:opacity-70"
+                    style={{ color: "#16A97B" }}
+                  >
+                    <Reply className="w-2.5 h-2.5" /> Add reply
+                  </button>
+                ) : (
+                  <div className="mt-1 space-y-1.5">
+                    <textarea
+                      value={replyText[t.id] ?? ""}
+                      onChange={(e) => setReplyText((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                      placeholder="Add a message to your ticket…"
+                      rows={2}
+                      className="w-full rounded-lg px-2.5 py-2 text-xs resize-none outline-none"
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        border:     "1px solid rgba(255,255,255,0.12)",
+                        color:      "var(--text-primary)",
+                      }}
+                      disabled={replying === t.id}
+                    />
+                    {replyError[t.id] && (
+                      <p className="text-[10px] text-red-400">{replyError[t.id]}</p>
+                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(null)}
+                        className="text-[10px] cursor-pointer transition-opacity hover:opacity-70"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void sendReply(t.id)}
+                        disabled={!(replyText[t.id] ?? "").trim() || replying === t.id}
+                        className="flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-lg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-80"
+                        style={{ background: "rgba(22,169,123,0.15)", border: "1px solid rgba(22,169,123,0.3)", color: "#16A97B" }}
+                      >
+                        {replying === t.id
+                          ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          : <Send className="w-2.5 h-2.5" />}
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-
-          {/* Summary */}
-          <p className="text-xs leading-relaxed" style={{ color: "var(--text-primary)" }}>
-            {t.summary}
-          </p>
-
-          {/* Resolution note */}
-          {t.resolution && (
-            <div className="mt-2 pt-2 text-xs" style={{ borderTop: "1px solid rgba(22,169,123,0.15)", color: "rgba(22,169,123,0.9)" }}>
-              <span className="font-semibold">Team reply: </span>{t.resolution}
-            </div>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -307,6 +469,7 @@ export function SupportChat() {
         role:      "assistant",
         content:   res.reply,
         escalated: res.escalated,
+        toolCalls: res.toolCalls ?? [],
       }]);
 
       if (res.escalated) {
@@ -557,6 +720,9 @@ export function SupportChat() {
                           <CheckCircle2 className="w-3 h-3" />
                           Ticket created — check the Tickets tab
                         </div>
+                      )}
+                      {msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <ToolCallBadges toolCalls={msg.toolCalls} />
                       )}
                     </div>
                   </div>
