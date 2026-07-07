@@ -96,8 +96,10 @@ router.get("/me", apiKeyAuth, async (_req, res, next) => {
 // ─── PATCH /api/v1/merchants/profile ─────────────────────────────────────────
 // JWT-authenticated — updates name and/or webhookUrl for the logged-in merchant.
 const ProfileUpdateSchema = z.object({
-  name:       z.string().min(2).max(100).optional(),
-  webhookUrl: z.string().url().nullable().optional(),
+  name:                     z.string().min(2).max(100).optional(),
+  webhookUrl:               z.string().url().nullable().optional(),
+  settlementAccountNumber:  z.string().regex(/^\d{10}$/, "Settlement account number must be 10 digits").nullable().optional(),
+  settlementBankCode:       z.string().min(3).max(10).nullable().optional(),
 });
 
 router.patch("/profile", jwtAuth, async (req, res, next) => {
@@ -107,11 +109,17 @@ router.patch("/profile", jwtAuth, async (req, res, next) => {
       throw new AppError(422, "VALIDATION_ERROR", parsed.error.errors[0]?.message ?? "Invalid request");
     }
 
-    const { name, webhookUrl } = parsed.data;
+    const { name, webhookUrl, settlementAccountNumber, settlementBankCode } = parsed.data;
 
-    // Nothing to update
-    if (name === undefined && webhookUrl === undefined) {
-      throw new AppError(422, "VALIDATION_ERROR", "Provide at least one field to update (name, webhookUrl)");
+    if (name === undefined && webhookUrl === undefined && settlementAccountNumber === undefined && settlementBankCode === undefined) {
+      throw new AppError(422, "VALIDATION_ERROR", "Provide at least one field to update");
+    }
+
+    // If only one of the pair is provided, reject — both must be set or both cleared
+    const settingAccount  = settlementAccountNumber !== undefined;
+    const settingBankCode = settlementBankCode !== undefined;
+    if (settingAccount !== settingBankCode) {
+      throw new AppError(422, "VALIDATION_ERROR", "settlementAccountNumber and settlementBankCode must be updated together");
     }
 
     const merchant = res.locals.merchant;
@@ -119,15 +127,19 @@ router.patch("/profile", jwtAuth, async (req, res, next) => {
     const updated = await prisma.merchant.update({
       where: { id: merchant.id },
       data: {
-        ...(name       !== undefined ? { name }                     : {}),
-        ...(webhookUrl !== undefined ? { webhookUrl: webhookUrl ?? null } : {}),
+        ...(name                    !== undefined ? { name }                                          : {}),
+        ...(webhookUrl              !== undefined ? { webhookUrl: webhookUrl ?? null }                : {}),
+        ...(settlementAccountNumber !== undefined ? { settlementAccountNumber: settlementAccountNumber ?? null } : {}),
+        ...(settlementBankCode      !== undefined ? { settlementBankCode: settlementBankCode ?? null }          : {}),
       },
     });
 
     res.status(200).json({
-      merchantId: updated.id,
-      name:       updated.name,
-      webhookUrl: updated.webhookUrl,
+      merchantId:               updated.id,
+      name:                     updated.name,
+      webhookUrl:                updated.webhookUrl,
+      settlementAccountNumber:  updated.settlementAccountNumber ?? null,
+      settlementBankCode:        updated.settlementBankCode ?? null,
     });
   } catch (err) {
     next(err);

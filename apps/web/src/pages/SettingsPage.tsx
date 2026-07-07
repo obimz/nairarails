@@ -10,7 +10,7 @@
 import React from "react";
 import {
   User, Key, Webhook, Copy, Check, RefreshCw, Trash2,
-  AlertTriangle, ShieldCheck, ShieldOff, Eye, EyeOff, Save,
+  AlertTriangle, ShieldCheck, ShieldOff, Eye, EyeOff, Save, Landmark,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet, apiPost } from "../lib/apiFetch.js";
@@ -18,15 +18,17 @@ import { apiFetch, apiGet, apiPost } from "../lib/apiFetch.js";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MerchantProfile {
-  merchantId:    string;
-  name:          string;
-  email:         string;
-  webhookUrl:    string | null;
-  emailVerified: boolean;
-  keyPrefix:     string | null;
-  keyIssuedAt:   string | null;
-  keyExpiresAt:  string | null;
-  createdAt:     string;
+  merchantId:               string;
+  name:                     string;
+  email:                    string;
+  webhookUrl:               string | null;
+  emailVerified:            boolean;
+  keyPrefix:                string | null;
+  keyIssuedAt:              string | null;
+  keyExpiresAt:             string | null;
+  settlementAccountNumber:  string | null;
+  settlementBankCode:       string | null;
+  createdAt:                string;
 }
 
 interface KeyInfo {
@@ -592,6 +594,152 @@ export function SettingsPage() {
       <div style={{ borderTop: "1px solid var(--border)" }} className="mb-10" />
 
       <WebhookSection profile={profile} onSaved={refetchProfile} />
+
+      <div style={{ borderTop: "1px solid var(--border)" }} className="mb-10" />
+
+      <SettlementSection profile={profile} onSaved={refetchProfile} />
     </div>
+  );
+}
+
+// ─── Settlement section ───────────────────────────────────────────────────────
+
+function SettlementSection({ profile, onSaved }: { profile: MerchantProfile; onSaved: () => void }) {
+  const [accountNumber, setAccountNumber] = React.useState(profile.settlementAccountNumber ?? "");
+  const [bankCode,      setBankCode]      = React.useState(profile.settlementBankCode ?? "");
+  const [dirty,   setDirty]   = React.useState(false);
+  const [saving,  setSaving]  = React.useState(false);
+  const [saved,   setSaved]   = React.useState(false);
+  const [error,   setError]   = React.useState("");
+
+  function handleChange(field: "account" | "bank", value: string) {
+    if (field === "account") setAccountNumber(value);
+    else setBankCode(value);
+    setDirty(true);
+    setSaved(false);
+    setError("");
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!dirty) return;
+    if ((accountNumber.trim() && !bankCode.trim()) || (!accountNumber.trim() && bankCode.trim())) {
+      setError("Provide both account number and bank code, or clear both.");
+      return;
+    }
+    setSaving(true); setError("");
+    try {
+      await apiFetch("/api/v1/merchants/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settlementAccountNumber: accountNumber.trim() || null,
+          settlementBankCode:      bankCode.trim()      || null,
+        }),
+      });
+      setSaved(true);
+      setDirty(false);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isConfigured = !!(profile.settlementAccountNumber && profile.settlementBankCode);
+
+  return (
+    <section className="mb-10">
+      <SectionHeading
+        icon={Landmark}
+        title="Settlement Account"
+        subtitle="When an order is paid with no splits configured, the full amount is transferred here automatically."
+      />
+
+      {/* Status badge */}
+      <div className="flex items-center gap-2 mb-4 text-xs">
+        {isConfigured ? (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold"
+                style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.25)", color: "#16A97B" }}>
+            <ShieldCheck className="w-3 h-3" /> Settlement account configured
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold"
+                style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", color: "#f59e0b" }}>
+            <AlertTriangle className="w-3 h-3" /> No settlement account — funds stay in Nomba sub-account
+          </span>
+        )}
+      </div>
+
+      <form onSubmit={handleSave}>
+        {/* Account number */}
+        <div style={{ borderBottom: "1px solid var(--border)" }}>
+          <label htmlFor="settlement-account"
+                 className="block text-[10px] font-semibold uppercase tracking-widest pt-4 pb-1"
+                 style={{ color: "var(--text-muted)" }}>
+            Account Number <span className="normal-case font-normal tracking-normal">(10 digits)</span>
+          </label>
+          <input
+            id="settlement-account"
+            type="text"
+            inputMode="numeric"
+            maxLength={10}
+            placeholder="0123456789"
+            value={accountNumber}
+            onChange={(e) => handleChange("account", e.target.value.replace(/\D/g, ""))}
+            className="w-full pb-3 pt-1 text-sm bg-transparent outline-none font-mono"
+            style={{ color: "var(--text-primary)", caretColor: "#16A97B" }}
+          />
+        </div>
+
+        {/* Bank code */}
+        <div style={{ borderBottom: "1px solid var(--border)" }}>
+          <label htmlFor="settlement-bank"
+                 className="block text-[10px] font-semibold uppercase tracking-widest pt-4 pb-1"
+                 style={{ color: "var(--text-muted)" }}>
+            Bank Code <span className="normal-case font-normal tracking-normal">(e.g. 058 for GTBank, 044 for Access)</span>
+          </label>
+          <div className="flex items-center gap-3 pb-3">
+            <input
+              id="settlement-bank"
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="058"
+              value={bankCode}
+              onChange={(e) => handleChange("bank", e.target.value)}
+              className="flex-1 text-sm bg-transparent outline-none font-mono"
+              style={{ color: "var(--text-primary)", caretColor: "#16A97B" }}
+            />
+            {dirty && (
+              <button type="submit" disabled={saving}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                      style={{ background: "#16A97B", color: "#000" }}>
+                {saving
+                  ? <div className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                  : <Save className="w-3 h-3" />}
+                {saving ? "Saving…" : "Save"}
+              </button>
+            )}
+            {saved && !dirty && (
+              <span className="inline-flex items-center gap-1 text-xs text-[#16A97B]">
+                <Check className="w-3 h-3" /> Saved
+              </span>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <p className="mt-3 text-xs text-red-400" style={{ borderLeft: "2px solid #f87171", paddingLeft: "8px" }}>
+            {error}
+          </p>
+        )}
+      </form>
+
+      <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+        Use <code className="font-mono text-[11px]" style={{ color: "var(--text-secondary)" }}>GET /api/v1/admin/banks</code> on the admin panel to look up the correct bank code for any Nigerian bank.
+        Leave both fields empty to disable auto-settlement.
+      </div>
+    </section>
   );
 }

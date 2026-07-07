@@ -158,15 +158,17 @@ router.get("/auth/me", jwtAuth, async (req, res, next) => {
     }
 
     res.status(200).json({
-      merchantId:    merchant.id,
-      name:          merchant.name,
-      email:         merchant.email,
-      webhookUrl:    merchant.webhookUrl,
-      emailVerified: merchant.emailVerified,
-      keyPrefix:     merchant.apiKeyPrefix ?? null,
-      keyIssuedAt:   merchant.apiKeyIssuedAt?.toISOString() ?? null,
-      keyExpiresAt:  merchant.apiKeyExpiresAt?.toISOString() ?? null,
-      createdAt:     merchant.createdAt.toISOString(),
+      merchantId:               merchant.id,
+      name:                     merchant.name,
+      email:                    merchant.email,
+      webhookUrl:               merchant.webhookUrl,
+      emailVerified:            merchant.emailVerified,
+      keyPrefix:                merchant.apiKeyPrefix ?? null,
+      keyIssuedAt:              merchant.apiKeyIssuedAt?.toISOString() ?? null,
+      keyExpiresAt:             merchant.apiKeyExpiresAt?.toISOString() ?? null,
+      settlementAccountNumber:  merchant.settlementAccountNumber ?? null,
+      settlementBankCode:       merchant.settlementBankCode ?? null,
+      createdAt:                merchant.createdAt.toISOString(),
     });
   } catch (err) {
     next(err);

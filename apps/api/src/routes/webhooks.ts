@@ -213,84 +213,138 @@ router.post(
         });
       });
 
-      // ── 7. Execute splits ─────────────────────────────────────────────────────
+      // ── 7. Execute splits or settlement transfer ──────────────────────────
       // Splits run on exact payment AND overpayment — split the expected amount only,
       // the excess is quarantined and refundable via POST /exceptions/:ref/refund-excess.
       if (classification === "paid" || classification === "overpayment") {
         const splitRows = await prisma.split.findMany({ where: { orderRef } });
 
-        // calculateSplits always sums back to expectedKobo exactly (rounding-safe).
-        const allocations = calculateSplits(expectedKobo, splitRows.map((s) => ({
-          party:          s.party,
-          account_number: s.accountNumber,
-          bank_code:      s.bankCode,
-          percentage:     s.percentage,
-        })));
+        if (splitRows.length > 0) {
+          // ── A. Percentage splits configured — execute each ─────────────────
+          // calculateSplits always sums back to expectedKobo exactly (rounding-safe).
+          const allocations = calculateSplits(expectedKobo, splitRows.map((s) => ({
+            party:          s.party,
+            account_number: s.accountNumber,
+            bank_code:      s.bankCode,
+            percentage:     s.percentage,
+          })));
 
-        for (const allocation of allocations) {
-          const splitRow = splitRows.find((s) => s.party === allocation.party);
-          if (!splitRow) continue;
+          for (const allocation of allocations) {
+            const splitRow = splitRows.find((s) => s.party === allocation.party);
+            if (!splitRow) continue;
 
-          try {
-            // Always lookup before transfer — sending to a wrong NUBAN can be irreversible.
-            const { accountName } = await lookupBankAccount({
-              bankCode:      allocation.bank_code,
-              accountNumber: allocation.account_number,
-            });
+            try {
+              const { accountName } = await lookupBankAccount({
+                bankCode:      allocation.bank_code,
+                accountNumber: allocation.account_number,
+              });
 
-            // merchantTxRef is compound so it's unique per split per event.
-            const merchantTxRef = `split_${orderRef}_${allocation.party}_${requestId}`;
+              const merchantTxRef = `split_${orderRef}_${allocation.party}_${requestId}`;
 
-            const { transferRef, status: txStatus } = await transferToBank({
-              amountKobo:    allocation.amount_kobo,
-              bankCode:      allocation.bank_code,
-              accountNumber: allocation.account_number,
-              accountName,
-              narration:     `NairaRails split — ${allocation.party} (${allocation.percentage}%)`,
-              merchantTxRef,
-            });
+              const { transferRef, status: txStatus } = await transferToBank({
+                amountKobo:    allocation.amount_kobo,
+                bankCode:      allocation.bank_code,
+                accountNumber: allocation.account_number,
+                accountName,
+                narration:     `NairaRails split — ${allocation.party} (${allocation.percentage}%)`,
+                merchantTxRef,
+              });
 
-            // Nomba transfers often return PENDING_BILLING initially.
-            // Only mark as "executed" if status confirms success; otherwise "pending".
-            const splitStatus = txStatus.toLowerCase() === "success" ? "executed" : "pending";
+              const splitStatus = txStatus.toLowerCase() === "success" ? "executed" : "pending";
 
-            // Update split row and append ledger entry in one transaction.
-            await prisma.$transaction([
-              prisma.split.update({
+              await prisma.$transaction([
+                prisma.split.update({
+                  where: { id: splitRow.id },
+                  data: {
+                    status:           splitStatus,
+                    amountKobo:       BigInt(allocation.amount_kobo),
+                    nombaTransferRef: transferRef,
+                  },
+                }),
+                prisma.ledgerEntry.create({
+                  data: {
+                    orderRef,
+                    entryType:  "split_payout",
+                    amountKobo: BigInt(-allocation.amount_kobo),
+                    reference:  transferRef,
+                    narration:  `Split to ${allocation.party}: ${allocation.amount_kobo} kobo (${allocation.percentage}%)`,
+                  },
+                }),
+              ]);
+
+              logger.info(
+                { orderRef, party: allocation.party, amountKobo: allocation.amount_kobo, transferRef, splitStatus },
+                `Split ${splitStatus === "executed" ? "executed" : "initiated (pending confirmation)"}`
+              );
+            } catch (splitErr) {
+              await prisma.split.update({
                 where: { id: splitRow.id },
-                data: {
-                  status:          splitStatus,
-                  amountKobo:      BigInt(allocation.amount_kobo),
-                  nombaTransferRef: transferRef,
-                },
-              }),
-              prisma.ledgerEntry.create({
+                data:  { status: "failed" },
+              }).catch(() => {});
+
+              logger.error(
+                { orderRef, party: allocation.party, err: splitErr },
+                "Split execution failed — marked as failed, manual retry required"
+              );
+            }
+          }
+        } else {
+          // ── B. No splits — auto-settle to merchant's settlement account ────
+          // Fetch the merchant's settlement account details.
+          const merchantRecord = await prisma.merchant.findUnique({
+            where:  { id: order.merchantId },
+            select: { settlementAccountNumber: true, settlementBankCode: true, name: true },
+          });
+
+          const settlementAccount = merchantRecord?.settlementAccountNumber;
+          const settlementBank    = merchantRecord?.settlementBankCode;
+
+          if (settlementAccount && settlementBank) {
+            try {
+              const { accountName } = await lookupBankAccount({
+                bankCode:      settlementBank,
+                accountNumber: settlementAccount,
+              });
+
+              const merchantTxRef = `settlement_${orderRef}_${requestId}`;
+
+              const { transferRef, status: txStatus } = await transferToBank({
+                amountKobo:    expectedKobo,
+                bankCode:      settlementBank,
+                accountNumber: settlementAccount,
+                accountName,
+                narration:     `NairaRails settlement — ${orderRef}`,
+                merchantTxRef,
+              });
+
+              const settlementStatus = txStatus.toLowerCase() === "success" ? "executed" : "pending";
+
+              await prisma.ledgerEntry.create({
                 data: {
                   orderRef,
-                  entryType:   "split_payout",
-                  amountKobo:  BigInt(-allocation.amount_kobo), // debit — money leaving
-                  reference:   transferRef,
-                  narration:   `Split to ${allocation.party}: ${allocation.amount_kobo} kobo (${allocation.percentage}%)`,
+                  entryType:  "split_payout",
+                  amountKobo: BigInt(-expectedKobo),
+                  reference:  transferRef,
+                  narration:  `Settlement to merchant account: ${expectedKobo} kobo (${settlementStatus})`,
                 },
-              }),
-            ]);
+              });
 
-            logger.info(
-              { orderRef, party: allocation.party, amountKobo: allocation.amount_kobo, transferRef, txStatus, splitStatus },
-              `Split ${splitStatus === "executed" ? "executed" : "initiated (pending confirmation)"}`
-            );
-          } catch (splitErr) {
-            // Mark the individual split as failed — don't abort the whole webhook.
-            // A failed split is observable in the DB and retriable; crashing the
-            // webhook handler would cause Nomba to re-deliver and re-classify.
-            await prisma.split.update({
-              where: { id: splitRow.id },
-              data:  { status: "failed" },
-            }).catch(() => {/* best-effort — don't mask original error in logs */});
-
-            logger.error(
-              { orderRef, party: allocation.party, err: splitErr },
-              "Split execution failed — marked as failed, manual retry required"
+              logger.info(
+                { orderRef, settlementAccount, expectedKobo, transferRef, settlementStatus },
+                `Full settlement ${settlementStatus === "executed" ? "executed" : "initiated (pending)"}`
+              );
+            } catch (settleErr) {
+              // Log and continue — order is still classified as paid, settlement can be retried manually
+              logger.error(
+                { orderRef, settlementAccount, err: settleErr },
+                "Settlement transfer failed — order marked paid, manual transfer required"
+              );
+            }
+          } else {
+            // No settlement account configured — funds stay in the Nomba sub-account
+            logger.warn(
+              { orderRef, merchantId: order.merchantId },
+              "No splits and no settlement account configured — funds remain in Nomba sub-account. Merchant should set a settlement account in Settings."
             );
           }
         }

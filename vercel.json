@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pnpm turbo run build --filter=@nairarails/web...",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "pnpm install",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}

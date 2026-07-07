@@ -2,9 +2,9 @@
 
 > **Every naira has an address. Every settlement has a rule. Every exception is caught before it becomes a crisis.**
 
-NairaRails is programmable payment infrastructure for Nigerian marketplace commerce: every order gets its own bank account, so a single chaotic pool of incoming transfers becomes fully traceable, automatically reconciled, and instantly split between sellers, platforms, and riders.
+NairaRails is programmable payment infrastructure for Nigerian marketplace commerce. Every order gets its own unique bank account number. The moment a buyer pays, the payment is automatically matched, classified, and routed — no spreadsheets, no batch jobs, no manual reconciliation.
 
-Built on Nomba's Virtual Account API for the Nomba x DevCareer Hackathon 2026 — **Build Track, Virtual Accounts as Infrastructure.**
+Built on Nomba's Virtual Account API for the **Nomba × DevCareer Hackathon 2026 — Build Track, Virtual Accounts as Infrastructure.**
 
 ---
 
@@ -12,7 +12,7 @@ Built on Nomba's Virtual Account API for the Nomba x DevCareer Hackathon 2026 �
 
 Nigeria processed **₦1.07 quadrillion** in digital transactions in 2024 — but marketplace payments still reconcile manually.
 
-A marketplace operator today receives payments into a single shared bank account. Every transfer shows a sender name and an amount — nothing else. A finance officer spends hours manually matching "Chidi Obi — ₦45,000" against 200 open orders. When the split goes to the seller, rider, and platform, it happens in a spreadsheet the next morning. When someone pays ₦48,000 instead of ₦50,000, the shortfall gets credited in full and quietly disappears. When NIBSS hiccupped in September 2024, ₦13.66 billion was posted without a corresponding debit — and nobody caught it at the application layer until Monday morning.
+A marketplace operator receives payments into one shared bank account. Every transfer shows a sender name and an amount — nothing else. A finance officer spends hours matching "Chidi Obi — ₦45,000" against 200 open orders. Splits happen in a spreadsheet the next morning. When someone pays ₦48,000 instead of ₦50,000, the shortfall quietly disappears. When NIBSS hiccupped in September 2024, ₦13.66 billion was posted without a corresponding debit — nobody caught it until Monday morning.
 
 **₦35.56 billion** was lost to publicly documented reconciliation failures in Nigeria between 2023 and 2024.
 
@@ -22,59 +22,117 @@ Every marketplace either builds this reconciliation layer themselves, badly, or 
 
 ## What NairaRails Does
 
-NairaRails assigns every order on a marketplace its own **unique virtual account number** (NUBAN), backed by a real Nigerian bank via Nomba. The moment a buyer pays, a webhook fires and NairaRails takes over:
+NairaRails assigns every order its own **unique virtual account number** (NUBAN) via Nomba. The moment a buyer pays, a webhook fires and NairaRails takes over:
 
 1. **Matches** the payment to the exact order — zero manual lookup
 2. **Classifies** it: exact match, underpayment, or overpayment
-3. **Routes** it instantly: seller's cut, platform fee, delivery rider — all split in the same settlement cycle
-4. **Reports** it: the operator sees a live dashboard with every order's payment status, every exception, and every naira's current location
+3. **Routes** it instantly: splits execute in the same webhook cycle
+4. **Reports** it: live dashboard with every order's status, every exception, every naira's location
 
 No spreadsheets. No batch jobs. No Monday morning surprises.
 
-Marketplaces integrate with one API call where they already create orders, and either consume a webhook or check the dashboard for status — no changes to their existing checkout flow, no reconciliation engine of their own to build.
+---
+
+## Who It's For
+
+NairaRails works for any business that collects payments and needs them matched to something:
+
+| Use case | How NairaRails helps |
+|---|---|
+| **Marketplace** (food, e-commerce, logistics) | Per-order virtual accounts + percentage splits to seller, platform, rider |
+| **School fees** | Per-student virtual accounts — every payment matched to the right student automatically |
+| **Landlord rent collection** | Per-tenant virtual accounts — arrears tracked, shortfalls flagged |
+| **Freelancer invoicing** | Per-invoice accounts — client pays the right NUBAN, you get notified |
+| **Ajo / Esusu contributions** | Per-member, per-cycle accounts — contributions tracked without a human counter |
+| **Any merchant without splits** | Set a settlement account — full amount transferred there automatically on payment |
+
+**Splits are optional.** Merchants who don't need fund distribution use NairaRails purely for reconciliation. Merchants who do configure splits choose their own model — percentage-based or single recipient. NairaRails executes the policy; it doesn't impose one.
 
 ---
 
 ## Core Features
 
 ### 🏦 Per-Order Virtual Accounts
-Every order gets a unique Nomba virtual account at creation. When payment arrives, the system already knows which order it belongs to — no human matching required. Settlement happens per-order, not as an accumulating per-seller balance, which is why NairaRails uses Virtual Accounts and Transfers directly rather than Nomba's Sub-accounts API — there's no persistent balance that needs holding.
+Every order gets a unique Nomba NUBAN. When payment arrives, the system already knows which order it belongs to — no matching required. Virtual accounts are created via Nomba's sub-account route, which is the only path that triggers webhook delivery.
 
 ### ⚡ Real-Time Webhook Reconciliation
-Every `virtual_account.funded` event triggers an immediate classification:
-- **Exact match** → mark paid, route funds, notify parties
-- **Underpayment** → hold, notify buyer of shortfall, flag for follow-up
-- **Overpayment** → mark paid, quarantine excess, one-click refund action available to ops
-- **Unmatched payment** → quarantine immediately, alert finance team — nothing disappears silently
-- **Duplicate delivery** → ignored via idempotency check on Nomba's `requestId` — webhooks may fire twice, and every external write is keyed on a unique reference so nothing is ever double-applied
+Every inbound payment triggers immediate classification:
 
-### 💸 Instant Split-Settlement
-Marketplace splits execute the moment payment is classified as paid — not in a batch job the next day. Configure any split at order creation:
+| State | What happens |
+|---|---|
+| **Exact match** | Mark paid → execute splits or settlement transfer → notify merchant |
+| **Underpayment** | Hold funds → flag shortfall → splits blocked until topped up |
+| **Overpayment** | Mark paid → execute splits on expected amount → quarantine excess → one-click refund available |
+| **Unmatched** | Quarantine immediately → alert ops team → nothing disappears silently |
+| **Duplicate** | Ignored via idempotency key on Nomba's `requestId` — processed exactly once |
+
+### 💸 Flexible Settlement
+
+**With splits** — configure any split at order creation. Each party is verified via Nomba's account-lookup before any transfer moves, sending to a wrong NUBAN is irreversible:
 
 ```json
 {
   "splits": [
-    { "party": "seller",   "percentage": 85 },
-    { "party": "platform", "percentage": 10 },
-    { "party": "rider",    "percentage": 5  }
+    { "party": "seller",   "account_number": "0123456789", "bank_code": "058", "percentage": 85 },
+    { "party": "platform", "account_number": "9876543210", "bank_code": "058", "percentage": 10 },
+    { "party": "rider",    "account_number": "1122334455", "bank_code": "044", "percentage": 5  }
   ]
 }
 ```
 
-Each party's bank account is verified via Nomba's account-lookup endpoint before any transfer is sent — sending to a wrong NUBAN can be irreversible, so the resolved account name is confirmed before money moves. Each party then receives their portion in the same settlement cycle.
+**Without splits** — merchants set a settlement account in Settings. On payment, the full amount transfers there automatically. No splits, no configuration on each order.
 
-### 📊 Customer-Level Reporting Dashboard
-Because every naira has a tagged virtual account and a purpose, NairaRails generates a live financial view automatically:
-- Total expected vs received today
-- Per-order payment status (paid / underpayment / pending / overpayment)
-- Exception queue — every discrepancy with its current state and assigned action
-- Full audit trail — every webhook event, every classification decision, every fund movement
+**No settlement account** — funds stay in the Nomba sub-account. Merchants are notified in the dashboard and can configure a settlement account at any time.
+
+### 📊 Live Merchant Dashboard
+- Overview: total expected vs received, collection rate, order status charts (7d / 30d)
+- Orders: full table with status filters, date filters, per-order reconciliation drawer with audit trail
+- Exceptions: tabbed queue (overpayment / underpayment / unmatched) with one-click refund actions
 
 ### 🛡️ Hardened Webhook Engine
-- HMAC-SHA256 signature verification on every event, computed against the raw request body and checked with a timing-safe comparison
-- Idempotency keys — every payment processed exactly once, enforced by a unique database constraint on Nomba's `requestId`
-- Immediate `200` acknowledgement once an event is safely recorded — including unmatched and duplicate cases, so Nomba never retries an event that's already been handled
-- Full event log retained for every webhook received — evidence in any dispute
+- HMAC-SHA256 signature verification on every inbound event
+- Idempotency enforced at DB level — unique constraint on `requestId`
+- Immediate `200` once the event is safely recorded — Nomba never retries a handled event
+- Full raw event log retained — evidence in any dispute
+
+### 🔔 Outbound Merchant Webhooks
+After each classification, NairaRails POSTs a `payment.classified` event to the merchant's registered webhook URL. Signed with HMAC-SHA256 so the merchant can verify authenticity. Fire-and-forget — a failed delivery never blocks the inbound handler.
+
+```json
+{
+  "event": "payment.classified",
+  "order_ref": "ord-001",
+  "status": "paid",
+  "received_amount_kobo": 500000,
+  "expected_amount_kobo": 500000,
+  "splits_executed": true,
+  "timestamp": "2026-07-07T10:00:00Z"
+}
+```
+
+### 🤖 AI Support Chat
+Merchants get a floating support assistant on the dashboard, powered by Gemini 2.5 Flash. It answers questions about orders, splits, API keys, and reconciliation using NairaRails-specific knowledge. When it can't answer — or when a message contains keywords like "missing money", "fraud", or "legal" — it escalates to a human support ticket automatically. Merchants see their open tickets in the chat panel and on the Overview dashboard.
+
+### 🌙 Nightly Reconciliation Backstop
+A `node-cron` job runs at 02:00 WAT every night. It pulls Nomba's `/transactions` for the previous day, diffs them against the local ledger, and surfaces any orphans (transactions on Nomba missing from the local DB — likely a dropped webhook) or amount drift. The same logic is callable on demand from the admin panel.
+
+### 🔑 Merchant Auth & API Keys
+- Email/password registration via Supabase Auth with email verification
+- `nrk_live_*` prefixed API keys, stored as SHA-256 hashes — plaintext shown once
+- Every marketplace-facing route accepts either `x-api-key` or `Authorization: Bearer <jwt>`
+- Key rotation, revocation, and expiry supported
+
+### 🏛️ Admin Panel
+Internal ops panel at `/admin`, gated by `x-admin-secret`. Sections:
+- **Overview** — system-wide stats across all merchants
+- **Merchants** — full merchant list with suspend, reactivate, force-verify, revoke key, edit
+- **Orders** — cross-merchant order list with filters and per-order detail drawer
+- **Reconcile** — on-demand diff of Nomba transactions vs local ledger
+- **Webhooks** — full inbound webhook event log
+- **Health** — environment variable checklist, DB connectivity, memory, uptime
+- **Tools** — bank account lookup, bulk expire, order reset
+- **Support** — all escalated merchant support tickets with conversation history and resolve action
+- **Danger** — nuclear option (wipes all orders and expires all VAs)
 
 ---
 
@@ -85,39 +143,45 @@ Because every naira has a tagged virtual account and a purpose, NairaRails gener
 │                   Marketplace App                    │
 │         (order creation → payment request)          │
 └──────────────────────┬──────────────────────────────┘
-                       │ REST API
+                       │ REST API  (x-api-key or Bearer JWT)
 ┌──────────────────────▼──────────────────────────────┐
 │                NairaRails API (Express)              │
 │                                                      │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────┐ │
-│  │  VA Engine  │  │ Webhook      │  │  Reconciler│ │
-│  │  (Nomba VA  │  │ Handler      │  │  (classify,│ │
-│  │   API)      │  │ (HMAC +      │  │  split     │ │
-│  │             │  │  idempotency)│  │  math)     │ │
-│  └──────┬──────┘  └──────┬───────┘  └─────┬──────┘ │
-│         │                │                │         │
-│  ┌──────▼────────────────▼────────────────▼──────┐  │
-│  │             PostgreSQL (Supabase)              │  │
-│  │   orders · splits · ledger_entries ·           │  │
-│  │   webhook_events (idempotency)                 │  │
-│  └──────────────────────┬───────────────────────┘  │
-│                         │                           │
-│  ┌──────────────────────▼───────────────────────┐  │
-│  │         Split-Settlement via Transfers        │  │
-│  │  lookup recipient → transfer → log result     │  │
-│  └──────────────────────┬───────────────────────┘  │
-│                         │                           │
-│  ┌──────────────────────▼───────────────────────┐  │
-│  │           Reporting API → Dashboard           │  │
-│  │   React dashboard — live, per-order view      │  │
-│  └──────────────────────────────────────────────┘  │
+│  ┌──────────────┐  ┌─────────────┐  ┌────────────┐ │
+│  │  VA Engine   │  │  Webhook    │  │ Reconciler │ │
+│  │  (Nomba VA   │  │  Handler    │  │ classify + │ │
+│  │   sub-acct)  │  │  HMAC +     │  │ split math │ │
+│  │              │  │  idempotency│  │            │ │
+│  └──────┬───────┘  └──────┬──────┘  └─────┬──────┘ │
+│         │                 │               │         │
+│  ┌──────▼─────────────────▼───────────────▼──────┐  │
+│  │              PostgreSQL (Supabase)             │  │
+│  │  orders · splits · ledger_entries ·            │  │
+│  │  webhook_events · merchants · support_tickets  │  │
+│  └─────────────────────────┬─────────────────────┘  │
+│                            │                         │
+│  ┌─────────────────────────▼────────────────────┐   │
+│  │     Settlement Engine (Nomba Transfers v2)    │   │
+│  │  lookup → transfer → ledger entry             │   │
+│  │  splits (percentage) or full settlement       │   │
+│  └─────────────────────────┬────────────────────┘   │
+│                            │                         │
+│  ┌─────────────────────────▼────────────────────┐   │
+│  │   Dashboard API · Support API · Admin API     │   │
+│  │   React dashboard — live, per-order view      │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  node-cron — nightly reconciliation backstop  │  │
+│  │  02:00 WAT · diffs Nomba vs local ledger       │  │
+│  └───────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
                           │
         ┌─────────────────▼──────────────────┐
-        │     Nomba API (sandbox.api.nomba.com)│
-        │  Virtual Accounts · Transfers        │
-        │  Webhooks · Transactions             │
-        └────────────────────────────────────┘
+        │         Nomba API                   │
+        │  Virtual Accounts · Transfers v2    │
+        │  Webhooks · Transactions            │
+        └─────────────────────────────────────┘
 ```
 
 ---
@@ -129,28 +193,32 @@ Because every naira has a tagged virtual account and a purpose, NairaRails gener
 | Monorepo | pnpm workspaces + Turborepo |
 | Backend API | Express (TypeScript) |
 | Validation | Zod — schemas shared between frontend and backend |
-| Database | PostgreSQL via Supabase (direct connection, session pooler) |
-| ORM | Drizzle |
-| Frontend Dashboard | React + Vite, TanStack Query, Tailwind CSS, Recharts |
-| Payment Infrastructure | Nomba Virtual Account API, Transfers API, Webhooks, Transactions API |
+| Database | PostgreSQL via Supabase |
+| ORM | Prisma |
+| Auth | Supabase Auth (email/password + JWT) |
+| Frontend | React + Vite, TanStack Query, Tailwind CSS, Recharts |
+| 3D Landing | Three.js + GSAP |
+| Payment Infrastructure | Nomba Virtual Account API, Transfers v2, Webhooks, Transactions API |
+| AI Support | Gemini 2.5 Flash |
+| Scheduled Jobs | node-cron (inside API process) |
+| Rate Limiting | express-rate-limit + Redis (in-memory fallback in dev) |
 | Testing | Vitest |
-| Webhook Security | HMAC-SHA256 signature verification (raw body, hex digest) |
-
-No Redis, no background job queue, no Sub-accounts API — deliberately. See **Explicitly Out of Scope** below.
+| CI/CD | GitHub Actions → Railway (API) |
 
 ---
 
 ## API Reference
 
-> Internal amounts are always in **kobo** (₦1.00 = 100 kobo), matching Nomba's own convention, to avoid unit-conversion bugs at the API boundary.
+> All amounts are in **kobo** (₦1.00 = 100 kobo), matching Nomba's convention.
 
-### Create a Virtual Account for an Order
+### Create an Order
 ```http
 POST /api/v1/orders
+x-api-key: nrk_live_...
 ```
 ```json
 {
-  "order_ref": "ord_9821",
+  "order_ref": "ord-001",
   "customer_name": "Chisom Traders",
   "expected_amount_kobo": 5000000,
   "currency": "NGN",
@@ -161,75 +229,34 @@ POST /api/v1/orders
   ]
 }
 ```
-
-**Response:**
-```json
-{
-  "order_ref": "ord_9821",
-  "virtual_account_number": "9900012345",
-  "bank_name": "Nomba",
-  "expected_amount_kobo": 5000000,
-  "currency": "NGN",
-  "status": "pending",
-  "created_at": "2026-06-28T09:00:00Z"
-}
-```
-
-### Webhook Event (Nomba → NairaRails)
-```http
-POST /api/v1/webhooks/nomba
-```
-```json
-{
-  "event": "virtual_account.funded",
-  "requestId": "req_3f9a2c",
-  "data": {
-    "merchantTxRef": "ord_9821",
-    "amount": 4800000,
-    "currency": "NGN",
-    "senderName": "Emeka Okafor",
-    "senderAccountNumber": "0123456789",
-    "senderBankCode": "058"
-  }
-}
-```
-
-Verified against the `nomba-signature` header: `HMAC-SHA256(webhookSecret, rawRequestBody)`, hex-encoded.
+`splits` is optional. Omit it entirely for reconciliation-only orders.
 
 ### Get Order Reconciliation Status
 ```http
 GET /api/v1/orders/{order_ref}/reconciliation
-```
-```json
-{
-  "order_ref": "ord_9821",
-  "virtual_account_number": "9900012345",
-  "expected_amount_kobo": 5000000,
-  "received_amount_kobo": 4800000,
-  "status": "underpayment",
-  "shortfall_kobo": 200000,
-  "excess_kobo": 0,
-  "splits_executed": false,
-  "splits": [
-    { "party": "seller",   "percentage": 85, "amount_paid_kobo": null, "status": "blocked" },
-    { "party": "platform", "percentage": 10, "amount_paid_kobo": null, "status": "blocked" },
-    { "party": "rider",    "percentage": 5,  "amount_paid_kobo": null, "status": "blocked" }
-  ],
-  "audit_trail": [
-    { "event": "va_created",       "timestamp": "2026-06-28T09:00:00Z" },
-    { "event": "payment_received", "amount_kobo": 4800000, "timestamp": "2026-06-28T14:32:11Z" },
-    { "event": "classified",       "status": "underpayment", "timestamp": "2026-06-28T14:32:11Z" }
-  ]
-}
+x-api-key: nrk_live_...
 ```
 
 ### Exceptions Queue
 ```http
-GET /api/v1/exceptions?type=overpayment
+GET  /api/v1/exceptions?type=overpayment|underpayment|unmatched
 POST /api/v1/exceptions/{order_ref}/refund-excess
+POST /api/v1/exceptions/{order_ref}/refund-shortfall
 ```
 
-Full contract, including error shapes and all endpoint variants, lives in `01-API-CONTRACT.md`.
+### Dashboard
+```http
+GET /api/v1/dashboard/overview?range=7d|30d|all
+GET /api/v1/dashboard/daily-series?range=7d|30d
+```
+
+### Support
+```http
+POST /api/v1/support/chat
+GET  /api/v1/support/tickets
+```
+
+Full contract lives in `ROUTES.md`.
 
 ---
 
@@ -243,54 +270,12 @@ function classify(expectedKobo: number, receivedKobo: number): "paid" | "underpa
 }
 ```
 
-```typescript
-// apps/api/src/routes/webhooks.ts (simplified)
-async function handleWebhook(event: NombaWebhookEvent) {
-  if (!verifyNombaWebhook(rawBody, signatureHeader, secret)) return res.status(401);
-
-  if (await webhookEventExists(event.requestId)) {
-    return res.status(200).json({ status: "duplicate_ignored" });
-  }
-  await recordWebhookEvent(event.requestId, event);
-
-  const order = await findOrderByRef(event.data.merchantTxRef);
-  if (!order) {
-    await quarantineUnmatched(event);
-    return res.status(200).json({ status: "unmatched_quarantined" });
-  }
-
-  const status = classify(order.expectedAmountKobo, event.data.amount);
-  await updateOrderStatus(order.orderRef, status, event.data.amount);
-
-  if (status === "paid" || status === "overpayment") {
-    await executeSplits(order.orderRef, order.expectedAmountKobo); // splits the expected portion only
-  }
-
-  return res.status(200).json({ status: "ok" });
-}
+Webhook handler flow (simplified):
 ```
-
-Full implementation detail, including the lookup-before-transfer step, lives in `02-BACKEND-GUIDE.md`.
-
----
-
-## Demo Scenario
-
-**A buyer orders food on a NairaRails-powered delivery marketplace.**
-
-1. Order created → NairaRails issues a unique virtual account `9900012345` via Nomba sandbox
-2. Buyer transfers ₦50 to that account number (sandbox amount, scaled down from the ₦5,000 business scenario to respect sandbox limits)
-3. Payment settles → Nomba fires `virtual_account.funded` webhook
-4. NairaRails verifies the signature, checks idempotency, classifies: **exact match**
-5. Transfers API fires for each party, each preceded by a recipient lookup:
-   - 85% → Restaurant's account
-   - 10% → Platform wallet
-   - 5% → Rider's account
-6. Dashboard updates in real time — order marked paid, splits logged, audit trail complete
-
-**Total human intervention required: zero.**
-
-A second live run demonstrates an underpayment (shortfall held and flagged) and an overpayment (excess quarantined, refunded live via the dashboard's one-click action).
+receive → verify HMAC → idempotency check → persist event
+→ classify payment → update order → execute splits or settlement
+→ notify merchant webhook → respond 200
+```
 
 ---
 
@@ -299,142 +284,120 @@ A second live run demonstrates an underpayment (shortfall held and flagged) and 
 ```
 nairarails/
 ├── apps/
-│   ├── web/                  # React + Vite dashboard + landing page
+│   ├── web/                    # React + Vite — landing, onboarding, dashboard
 │   │   └── src/
-│   │       ├── pages/        # LandingPage, OnboardingPage, Orders, Exceptions, Overview
-│   │       ├── components/   # ProtectedRoute, HeroNetworkScene, StatusBadge
-│   │       └── lib/          # apiFetch (x-api-key injection), money, queryClient
-│   └── api/                  # Express backend
-│       ├── src/routes/       # orders, webhooks, exceptions, dashboard, merchants
-│       ├── src/middleware/   # apiKeyAuth, validate, errorHandler, CORS
-│       ├── src/lib/          # notifyMerchant, logger
-│       ├── src/db/           # Prisma schema + Supabase connection
-│       ├── src/integrations/ # nombaClient.ts — all outbound Nomba calls
-│       └── src/scripts/      # seed.ts — demo data for dashboard
+│   │       ├── pages/          # Landing, Onboarding, Login, Overview, Orders,
+│   │       │                   # Exceptions, Settings, Admin, Docs
+│   │       ├── components/     # SupportChat, HeroNetworkScene, ThemeToggle, StatusBadge
+│   │       └── lib/            # apiFetch, money, queryClient, supabase
+│   └── api/                    # Express backend
+│       ├── src/routes/         # orders, webhooks, exceptions, dashboard,
+│       │                       # merchants, auth, keys, support, admin
+│       ├── src/middleware/     # apiKeyAuth, jwtAuth, authAny, rateLimiter, errorHandler
+│       ├── src/lib/            # reconciliationCron, support-context, notifyMerchant, logger
+│       ├── src/integrations/   # nombaClient.ts — all outbound Nomba calls
+│       ├── src/scripts/        # seed.ts — demo data
+│       └── prisma/             # schema.prisma
 ├── packages/
-│   ├── shared-types/         # Zod schemas — the API contract, as code
-│   └── webhook-core/         # Pure signature verification + reconciler + split math
-│       └── tests/            # All 5 payment states tested in isolation
-├── pnpm-workspace.yaml
-├── turbo.json
-└── .env.example
+│   ├── shared-types/           # Zod schemas — API contract as code
+│   └── webhook-core/           # Pure reconciliation logic + tests
+│       └── src/tests/          # All 5 payment states tested in isolation
+├── .env.example
+├── ROUTES.md                   # Full API contract
+├── DEPLOY.md                   # Railway deployment guide
+└── DEVELOPMENT-HISTORY.md      # Build history across all cycles
 ```
-
-Full structure rationale lives in the implementation guides — notably why webhook *logic* lives in `packages/webhook-core` (pure, unit-testable) while the webhook *route* lives in `apps/api` (the actual HTTP listener).
 
 ---
 
-## Second Cycle Additions
-
-The second cycle transformed NairaRails from a working demo into a believable product.
-
-### Landing Page (`/`)
-3D animated React page powered by Three.js + GSAP. Includes a network animation of bank nodes with payment pulses, problem framing with the ₦35.56B reconciliation loss figure, a how-it-works walkthrough, and a "Get API Access" CTA leading to merchant onboarding.
-
-Degrades gracefully — users with `prefers-reduced-motion` or viewport width below 768px see a static fallback with no crash.
-
-### Merchant Onboarding (`/signup`)
-Self-serve signup: marketplace name, email, and optional webhook URL. On success, an `nrk_live_*` prefixed API key is issued **once** and shown in a copy-to-clipboard box. The key is stored in `localStorage` and injected into every subsequent API request.
-
-```http
-POST /api/v1/merchants/signup
-```
-```json
-{ "name": "Jumia Foods", "email": "dev@jumiafood.ng", "webhookUrl": "https://jumiafood.ng/webhooks/nairarails" }
-```
-
-### API Key Authentication
-Every marketplace-facing route now requires an `x-api-key` header. Each merchant sees only their own orders, exceptions, and dashboard stats.
-
-```http
-GET /api/v1/orders
-x-api-key: nrk_live_...
-```
-
-Routes that remain public: `POST /merchants/signup`, `POST /webhooks/nomba`, `GET /health`.
-
-### Outbound Merchant Webhooks
-After each payment is classified, NairaRails POSTs a `payment.classified` event to the merchant's registered `webhookUrl`. Fire-and-forget — a failed delivery never crashes the inbound webhook handler or delays Nomba's `200`.
-
-```json
-{
-  "event": "payment.classified",
-  "order_ref": "ord-001",
-  "status": "paid",
-  "received_amount_kobo": 500000,
-  "expected_amount_kobo": 500000,
-  "splits_executed": true,
-  "timestamp": "2026-07-03T10:00:00Z"
-}
-```
-
-### Protected Dashboard
-The dashboard now requires a valid API key in `localStorage`. Navigating to `/dashboard` without one redirects to `/signup`. A Sign out button clears the key and returns to signup.
-
----
-
-## Environment Setup
+## Setup
 
 ```bash
-git clone https://github.com/your-team/nairarails.git
+git clone https://github.com/your-repo/nairarails.git
 cd nairarails
 pnpm install
 
 cp .env.example .env
-# Add your Nomba sandbox credentials and Supabase connection string
+# Fill in Nomba credentials, Supabase URLs, Gemini API key
 
-pnpm dev  # runs apps/web and apps/api together via Turborepo
+pnpm dev        # starts API (port 3000) + web (port 5173)
 ```
 
 **Required environment variables:**
 ```env
+# Database
+DATABASE_URL=          # Supabase transaction pooler (port 6543, ?pgbouncer=true)
+DIRECT_URL=            # Supabase session pooler (port 5432, for migrations)
+
+# Nomba
 NOMBA_BASE_URL=https://api.nomba.com/v1
 NOMBA_CLIENT_ID=
 NOMBA_CLIENT_SECRET=
-NOMBA_ACCOUNT_ID=        # parent account ID — sent in the accountId header on every request
-NOMBA_SUB_ACCOUNT_ID=    # sub-account ID — used as path param in /accounts/virtual/{subAccountId}
-                         # webhooks only fire when virtual accounts are created via the subaccount
-                         # route; the generic /accounts/virtual endpoint provisions the account
-                         # but Nomba never delivers webhook events for it
+NOMBA_ACCOUNT_ID=
+NOMBA_SUB_ACCOUNT_ID=  # webhooks only fire for VAs created via the sub-account route
 NOMBA_WEBHOOK_SECRET=
-DATABASE_URL=
-DIRECT_URL=
+
+# Supabase (server-side)
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Auth
+ADMIN_SECRET=          # x-admin-secret header for /api/v1/admin/* routes
+JWT_SECRET=
+
+# AI Support
+GEMINI_API_KEY=        # https://aistudio.google.com/app/apikey (free tier works)
+
+# Frontend (VITE_* — browser-safe)
 VITE_API_BASE=http://localhost:3000
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+
+# Optional
+REDIS_URL=             # rate limiter (in-memory fallback if not set)
+FRONTEND_URL=http://localhost:5173
 ```
 
-**Optional (demo / seed):**
-```env
-# Set to a webhook.site URL to observe outbound payment notifications during a live demo
-DEMO_MERCHANT_WEBHOOK_URL=
-```
-
-To seed demo data (5 orders across all payment states):
+**Seed demo data:**
 ```bash
+pnpm --filter @nairarails/api db:push   # apply schema to DB
 npx tsx --env-file=.env apps/api/src/scripts/seed.ts
 ```
-Use API key `nrk_live_demo_seed_key` in the `x-api-key` header to authenticate as the demo merchant.
+Use `nrk_live_demo_seed_key` in the `x-api-key` header to authenticate as the demo merchant.
 
 ---
 
-## Why NairaRails Wins on the Judging Criteria
+## Demo Flow
 
-| Judging Criterion | NairaRails Response |
+1. Open `/` — landing page explains the problem and product
+2. Sign up at `/signup` → verify email → API key issued once
+3. `POST /api/v1/orders` with your key → get a NUBAN back
+4. In Nomba sandbox, send a transfer to that NUBAN
+5. Webhook fires → dashboard updates in real time
+6. Splits execute (or full settlement transfer if no splits)
+7. Try an underpayment → shortfall flagged, splits blocked
+8. Try an overpayment → excess quarantined, one-click refund in Exceptions
+
+---
+
+## Judging Criteria
+
+| Criterion | NairaRails |
 |---|---|
-| **Reconciliation logic quality** | Per-VA matching, every payment state handled explicitly — exact, under, over, unmatched, duplicate — backed by isolated unit tests |
-| **Underpayment & overpayment handling** | Underpayments held and buyer notified; overpayments quarantined with one-click ops refund — nothing absorbed silently |
-| **Customer-level reporting clarity** | Live dashboard with per-order status, exception queue, and full audit trail |
+| **Reconciliation logic quality** | Per-VA matching, all 5 payment states handled explicitly, backed by isolated unit tests in `packages/webhook-core` |
+| **Underpayment handling** | Funds held, shortfall calculated and surfaced, splits blocked until fully paid, one-click refund to buyer |
+| **Overpayment handling** | Splits run on expected amount only, excess quarantined, one-click refund to sender from dashboard |
+| **Customer-level reporting** | Live per-order status, collection rate chart, exception queue, full audit trail per order |
+| **Infrastructure depth** | Nightly reconciliation backstop, outbound webhook signing, rate limiting, idempotency, AI support escalation |
 
 ---
 
-## Explicitly Out of Scope (Stated, Not Hidden)
+## Out of Scope (Stated, Not Hidden)
 
-- Password-based login / session management — API key is the credential; localStorage is used intentionally for hackathon simplicity (production would use a secure HttpOnly session)
-- API key rotation / revocation endpoint
-- Sub-accounts / persistent per-seller balances — settlement is per-order, not an accumulating balance, so there's no balance for a sub-account to hold
-- Background job queue for webhook processing — handled synchronously, correct at hackathon transaction volume
-- Retry queue for failed outbound merchant webhooks — best-effort delivery, logged on failure
-- Real BVN/KYC verification
-- Scheduled nightly reconciliation job — the reconciliation-backstop logic exists and is callable on demand against Nomba's Transactions API, but isn't wired to a cron scheduler
+- BVN/KYC verification
+- Retry queue for failed outbound merchant webhooks (best-effort, logged on failure)
+- Sub-accounts / persistent per-seller balances (settlement is per-order by design)
+- Background job queue for webhook processing (synchronous, correct at this volume)
 
 ---
 
@@ -444,10 +407,4 @@ Nigeria processes a quadrillion naira digitally every year through infrastructur
 
 ---
 
-## Team
-
-Built for the **Nomba x DevCareer Hackathon 2026** — Build Track, Virtual Accounts as Infrastructure.
-
----
-
-*NairaRails — programmable payment infrastructure for Nigeria's next growth wave.*
+*Built for the **Nomba × DevCareer Hackathon 2026** — Virtual Accounts as Infrastructure.*

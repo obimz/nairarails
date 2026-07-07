@@ -76,6 +76,11 @@ model Merchant {
   /// Webhook secret for signing outbound payloads — generated on signup, rotatable via settings
   webhookSecret String?  @map("webhook_secret")
 
+  /// Settlement account — used when an order is paid with no splits configured.
+  /// If set, the full expected amount is transferred here automatically.
+  settlementAccountNumber String? @map("settlement_account_number")
+  settlementBankCode      String? @map("settlement_bank_code")
+
   /// True when an admin has suspended this merchant — all API key auth fails while suspended
   suspended     Boolean  @default(false) @map("suspended")
   /// ISO timestamp when the merchant was suspended, null if not suspended
