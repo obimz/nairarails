@@ -52,3 +52,4 @@ CLAUDE.md
 # Local dev utility scripts
 gen-sig.mjs
 hardening-test.mjs
+ratings.md
