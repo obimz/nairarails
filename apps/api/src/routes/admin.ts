@@ -4,9 +4,10 @@
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
 import { prisma } from "../db/client.js";
-import { listTransactions, NombaApiError, lookupBankAccount, fetchBankCodes, expireVirtualAccount } from "../integrations/nombaClient.js";
+import { NombaApiError, lookupBankAccount, fetchBankCodes, expireVirtualAccount } from "../integrations/nombaClient.js";
 import { logger } from "../lib/logger.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { runReconciliation } from "../lib/reconciliationCron.js";
 
 const router: ExpressRouter = Router();
 
@@ -38,10 +39,8 @@ const ReconcileQuerySchema = z.object({
 // Pulls Nomba's /transactions for a date range, diffs against local
 // ledger_entries by reference (= Nomba transactionId), and surfaces drift.
 //
-// Three categories of drift:
-//   orphans  — on Nomba but no matching ledger_entry in our DB (missed processing)
-//   drift    — amount in our DB doesn't match Nomba's amount
-//   matched  — count of clean matches (informational)
+// Delegates to runReconciliation() from reconciliationCron.ts so the cron
+// and this endpoint share exactly one codepath.
 router.get("/reconcile-check", async (req, res, next) => {
   try {
     const query = ReconcileQuerySchema.safeParse(req.query);
@@ -49,28 +48,34 @@ router.get("/reconcile-check", async (req, res, next) => {
       throw new AppError(422, "VALIDATION_ERROR", "Invalid query parameters");
     }
 
-    // Default date range: today UTC
     const today     = new Date().toISOString().split("T")[0] as string;
     const date_from = query.data.date_from ?? today;
     const date_to   = query.data.date_to   ?? today;
 
-    logger.info({ date_from, date_to }, "Reconcile check started");
-
-    // ── 1. Fetch Nomba transactions for the period ───────────────────────────
-    let transactions: Awaited<ReturnType<typeof listTransactions>>["transactions"] = [];
-    let totalCount = 0;
     try {
-      const result = await listTransactions({
-        dateFrom: date_from,
-        dateTo:   date_to,
-        status:   "success",
+      const result = await runReconciliation(date_from, date_to);
+      return res.status(200).json({
+        checked_at:    result.checkedAt,
+        date_from:     result.dateFrom,
+        date_to:       result.dateTo,
+        total_checked: result.totalNomba,
+        matched:       result.matched,
+        orphans:       result.orphans.map((o) => ({
+          transactionId: o.transactionId,
+          merchantTxRef: o.merchantTxRef,
+          amount_kobo:   o.amountKobo,
+          created_at:    o.createdAt,
+        })),
+        drift: result.drift.map((d) => ({
+          transactionId:     d.transactionId,
+          merchantTxRef:     d.merchantTxRef,
+          nomba_amount_kobo: d.nombaAmountKobo,
+          local_amount_kobo: d.localAmountKobo,
+          order_ref:         d.orderRef,
+        })),
+        ...(result.totalNomba === 0 ? { summary: "No Nomba transactions found for this period" } : {}),
       });
-      transactions = result.transactions;
-      totalCount   = result.totalCount;
     } catch (nombaErr) {
-      // Surface Nomba API errors as a structured 502 rather than a raw 500 —
-      // the endpoint is still useful for local ledger inspection even when
-      // Nomba's /transactions is unavailable (e.g. sandbox limitations).
       if (nombaErr instanceof NombaApiError) {
         logger.warn(
           { status: nombaErr.status, body: nombaErr.body },
@@ -85,92 +90,6 @@ router.get("/reconcile-check", async (req, res, next) => {
       }
       throw nombaErr;
     }
-
-    if (transactions.length === 0) {
-      return res.status(200).json({
-        checked_at:    new Date().toISOString(),
-        date_from,
-        date_to,
-        total_checked: 0,
-        matched:       0,
-        orphans:       [],
-        drift:         [],
-        summary:       "No Nomba transactions found for this period",
-      });
-    }
-
-    // ── 2. Fetch our local ledger entries for the same period ────────────────
-    // Ledger entries store the Nomba transactionId in the `reference` column.
-    const periodStart = new Date(`${date_from}T00:00:00.000Z`);
-    const periodEnd   = new Date(`${date_to}T23:59:59.999Z`);
-
-    const localEntries = await prisma.ledgerEntry.findMany({
-      where: {
-        createdAt: { gte: periodStart, lte: periodEnd },
-        reference: { not: null },
-      },
-      select: {
-        reference:   true,
-        amountKobo:  true,
-        orderRef:    true,
-        entryType:   true,
-      },
-    });
-
-    // Index local entries by reference for O(1) lookup.
-    const localByRef = new Map(
-      localEntries.map((e) => [e.reference, e])
-    );
-
-    // ── 3. Diff Nomba vs local ────────────────────────────────────────────────
-    const orphans:  Array<{ transactionId: string; merchantTxRef: string; amount_kobo: number; created_at: string }> = [];
-    const drift:    Array<{ transactionId: string; merchantTxRef: string; nomba_amount_kobo: number; local_amount_kobo: number; order_ref: string }> = [];
-    let   matched = 0;
-
-    for (const tx of transactions) {
-      const local = localByRef.get(tx.transactionId);
-
-      if (!local) {
-        // On Nomba but not in our ledger — potential missed webhook.
-        orphans.push({
-          transactionId: tx.transactionId,
-          merchantTxRef: tx.merchantTxRef,
-          amount_kobo:   tx.amount,
-          created_at:    tx.createdAt,
-        });
-        continue;
-      }
-
-      const localKobo = Math.abs(Number(local.amountKobo));
-      if (localKobo !== tx.amount) {
-        // Amount mismatch between Nomba and our DB.
-        drift.push({
-          transactionId:     tx.transactionId,
-          merchantTxRef:     tx.merchantTxRef,
-          nomba_amount_kobo: tx.amount,
-          local_amount_kobo: localKobo,
-          order_ref:         local.orderRef,
-        });
-        continue;
-      }
-
-      matched++;
-    }
-
-    logger.info(
-      { total: transactions.length, matched, orphans: orphans.length, drift: drift.length },
-      "Reconcile check complete"
-    );
-
-    return res.status(200).json({
-      checked_at:    new Date().toISOString(),
-      date_from,
-      date_to,
-      total_checked: totalCount,
-      matched,
-      orphans,
-      drift,
-    });
   } catch (err) {
     return next(err);
   }
@@ -917,6 +836,85 @@ router.get("/system-health", async (req, res, next) => {
         env:          process.env["NODE_ENV"] ?? "development",
         memory_mb:    Math.round(process.memoryUsage().rss / 1024 / 1024),
       },
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/v1/admin/support-tickets ───────────────────────────────────────
+// All escalated support tickets across all merchants.
+// Supports optional filters: status, merchant_id.
+const SupportTicketsQuerySchema = z.object({
+  status:      z.enum(["open", "resolved"]).optional(),
+  merchant_id: z.string().optional(),
+  page:        z.coerce.number().int().positive().default(1),
+  page_size:   z.coerce.number().int().positive().max(100).default(25),
+});
+
+router.get("/support-tickets", async (req, res, next) => {
+  try {
+    const query = SupportTicketsQuerySchema.safeParse(req.query);
+    if (!query.success) throw new AppError(422, "VALIDATION_ERROR", "Invalid query parameters");
+
+    const { status, merchant_id, page, page_size } = query.data;
+    const skip = (page - 1) * page_size;
+
+    const where: import("@prisma/client").Prisma.SupportTicketWhereInput = {
+      ...(status      ? { status }              : {}),
+      ...(merchant_id ? { merchantId: merchant_id } : {}),
+    };
+
+    const [tickets, total_count] = await Promise.all([
+      prisma.supportTicket.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: page_size,
+        include: { merchant: { select: { id: true, name: true, email: true } } },
+      }),
+      prisma.supportTicket.count({ where }),
+    ]);
+
+    res.status(200).json({
+      results: tickets.map((t) => ({
+        id:           t.id,
+        merchant:     { id: t.merchant.id, name: t.merchant.name, email: t.merchant.email },
+        summary:      t.summary,
+        status:       t.status,
+        resolution:   t.resolution ?? null,
+        messages:     JSON.parse(t.messages) as unknown,
+        created_at:   t.createdAt.toISOString(),
+        updated_at:   t.updatedAt.toISOString(),
+      })),
+      page,
+      page_size,
+      total_count,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── PATCH /api/v1/admin/support-tickets/:id/resolve ─────────────────────────
+// Mark a ticket as resolved and optionally add a resolution note.
+router.patch("/support-tickets/:id/resolve", async (req, res, next) => {
+  try {
+    const id         = parseInt(req.params["id"] ?? "0", 10);
+    const { note }   = req.body as { note?: string };
+
+    if (!id) throw new AppError(400, "INVALID_ID", "Ticket ID must be a number");
+
+    const ticket = await prisma.supportTicket.findUnique({ where: { id } });
+    if (!ticket) throw new AppError(404, "NOT_FOUND", `Support ticket ${id} not found`);
+
+    const updated = await prisma.supportTicket.update({
+      where: { id },
+      data:  { status: "resolved", resolution: note ?? null },
+    });
+
+    logger.info({ ticketId: id, note }, "Admin: support ticket resolved");
+    res.status(200).json({
+      id:         updated.id,
+      status:     updated.status,
+      resolution: updated.resolution ?? null,
+      updated_at: updated.updatedAt.toISOString(),
     });
   } catch (err) { next(err); }
 });

@@ -572,7 +572,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="px-6 py-8 max-w-2xl">
+    <div className="px-4 py-6 md:px-6 md:py-8 max-w-2xl">
       {/* Page header */}
       <div className="mb-10">
         <h1 className="text-lg font-bold font-display mb-1" style={{ color: "var(--text-primary)" }}>

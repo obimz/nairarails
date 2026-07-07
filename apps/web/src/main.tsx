@@ -27,6 +27,7 @@ import { SettingsPage }       from "./pages/SettingsPage.js";
 import { LogoLockup }     from "./components/Logo.js";
 import { supabase }       from "./lib/supabase.js";
 import { ToastProvider }  from "./contexts/ToastContext.js";
+import { SupportChat }    from "./components/SupportChat.js";
 import "./index.css";
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -171,8 +172,8 @@ function DashboardLayout() {
           </div>
 
           {/* Theme toggle */}
-          <div className="px-3 py-1.5">
-            <ThemeToggle showSystemOption />
+          <div className="px-1 py-1">
+            <ThemeToggle sidebar />
           </div>
 
           {/* Sign out */}
@@ -246,6 +247,9 @@ function DashboardLayout() {
       <main className="flex-1 md:ml-60 min-h-screen pb-20 md:pb-0">
         <Outlet />
       </main>
+
+      {/* Floating support chat — available on all dashboard pages */}
+      <SupportChat />
     </div>
   );
 }

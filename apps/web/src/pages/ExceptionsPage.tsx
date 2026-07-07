@@ -286,7 +286,7 @@ export function ExceptionsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-8 flex items-center gap-3 text-slate-500 text-sm">
+      <div className="p-4 md:p-8 flex items-center gap-3 text-slate-500 text-sm">
         <div className="w-4 h-4 border-2 border-slate-700 border-t-green-500 rounded-full animate-spin" />
         Loading exceptions…
       </div>
@@ -295,7 +295,7 @@ export function ExceptionsPage() {
 
   if (isError) {
     return (
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Exception Queue</h2>
           <button type="button" onClick={() => void refetch()} className="btn-ghost text-xs gap-2 cursor-pointer">
@@ -322,7 +322,7 @@ export function ExceptionsPage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -341,7 +341,7 @@ export function ExceptionsPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 p-1 rounded-xl"
+      <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-xl"
            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", width: "fit-content" }}>
         {TABS.map(({ type, label }) => (
           <button

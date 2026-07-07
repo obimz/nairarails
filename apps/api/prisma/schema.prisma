@@ -87,6 +87,7 @@ model Merchant {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   orders        Order[]
+  supportTickets SupportTicket[]
 
   @@map("merchants")
 }
@@ -161,6 +162,39 @@ enum LedgerEntryType {
   adjustment
 
   @@map("ledger_entry_type")
+}
+
+// ─── Support Tickets ──────────────────────────────────────────────────────────
+// Created when Gemini cannot answer a merchant's question and escalates to human.
+// Stores the full conversation up to the point of escalation so the ops team
+// has context before replying.
+model SupportTicket {
+  id             Int                  @id @default(autoincrement())
+  merchantId     String               @map("merchant_id")
+  merchant       Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  /// Short summary of the question — first user message truncated to 120 chars
+  summary        String               @map("summary")
+
+  /// Full conversation as a JSON array of { role, content } objects
+  messages       String               @map("messages") @db.Text
+
+  status         SupportTicketStatus  @default(open)
+
+  /// Optional admin note added when resolving the ticket
+  resolution     String?              @map("resolution")
+
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  @@map("support_tickets")
+}
+
+enum SupportTicketStatus {
+  open
+  resolved
+
+  @@map("support_ticket_status")
 }
 
 // ─── Webhook Events ───────────────────────────────────────────────────────────

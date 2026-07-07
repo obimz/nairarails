@@ -11,9 +11,11 @@ import { adminRouter }     from "./routes/admin.js";
 import { merchantRouter }  from "./routes/merchants.js";
 import { authRouter }      from "./routes/auth.js";
 import { keysRouter }      from "./routes/keys.js";
+import { supportRouter }   from "./routes/support.js";
 import { errorHandler }    from "./middleware/errorHandler.js";
 import { authLimiter, apiLimiter, globalLimiter } from "./middleware/rateLimiter.js";
 import { logger }          from "./lib/logger.js";
+import { startReconciliationCron } from "./lib/reconciliationCron.js";
 
 const app: Express = express();
 
@@ -79,6 +81,7 @@ app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1", orderRouter);
 app.use("/api/v1", exceptionRouter);
 app.use("/api/v1", dashboardRouter);
+app.use("/api/v1", supportRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -102,6 +105,12 @@ app.listen(PORT, HOST, () => {
     { port: PORT, env: process.env["NODE_ENV"] ?? "development" },
     "NairaRails API started"
   );
+
+  // ─── Nightly reconciliation cron ────────────────────────────────────────────
+  // Runs at 02:00 WAT (01:00 UTC) every night. Diffs Nomba's /transactions
+  // against our local ledger and logs any orphans or amount drift for ops review.
+  // Failures are caught and logged — never crashes the API process.
+  startReconciliationCron();
 });
 
 export default app;

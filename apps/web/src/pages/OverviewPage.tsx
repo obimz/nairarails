@@ -10,6 +10,7 @@ import {
 import {
   RefreshCw, TrendingUp, Clock, AlertTriangle,
   CheckCircle, TrendingDown, Layers, Copy, Check, Key, X,
+  Ticket, MessageCircle,
 } from "lucide-react";
 import {
   useDashboard, useDailySeries,
@@ -17,6 +18,7 @@ import {
 } from "../hooks/index.js";
 import { formatNaira, formatNairaCompact } from "../lib/money.js";
 import { useToast } from "../contexts/ToastContext.js";
+import { apiFetch } from "../lib/apiFetch.js";
 
 // ─── Range picker ─────────────────────────────────────────────────────────────
 
@@ -542,6 +544,142 @@ function ApiKeyModal({ apiKey, onClose }: { apiKey: string; onClose: () => void 
   );
 }
 
+// ─── Support tickets widget ───────────────────────────────────────────────────
+
+interface SupportTicket {
+  id:         number;
+  summary:    string;
+  status:     "open" | "resolved";
+  resolution: string | null;
+  created_at: string;
+}
+
+function SupportTicketsWidget() {
+  const [tickets, setTickets] = React.useState<SupportTicket[] | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await apiFetch<{ tickets: SupportTicket[] }>("/api/v1/support/tickets");
+      setTickets(res.tickets);
+    } catch {
+      setTickets([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  React.useEffect(() => { void load(); }, []);
+
+  // Don't render the widget at all if there are no tickets
+  if (!loading && (!tickets || tickets.length === 0)) return null;
+
+  const open     = tickets?.filter((t) => t.status === "open").length ?? 0;
+  const resolved = tickets?.filter((t) => t.status === "resolved").length ?? 0;
+
+  return (
+    <div
+      className="mt-4 rounded-2xl p-5"
+      style={{
+        background: "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+        border: open > 0 ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(255,255,255,0.09)",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{
+              background: open > 0 ? "rgba(245,158,11,0.12)" : "rgba(22,169,123,0.10)",
+              border: open > 0 ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(22,169,123,0.20)",
+            }}
+          >
+            <Ticket className="w-4 h-4" style={{ color: open > 0 ? "#f59e0b" : "#16A97B" }} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              Support Tickets
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              {loading ? "Loading…" : `${open} open · ${resolved} resolved`}
+            </p>
+          </div>
+        </div>
+        {/* Hint to open chat */}
+        <div
+          className="flex items-center gap-1.5 text-[10px] font-medium px-2.5 py-1.5 rounded-lg"
+          style={{ background: "rgba(22,169,123,0.08)", border: "1px solid rgba(22,169,123,0.15)", color: "#16A97B" }}
+        >
+          <MessageCircle className="w-3 h-3" />
+          Open chat widget to reply
+        </div>
+      </div>
+
+      {/* Ticket rows */}
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-12 rounded-xl animate-pulse"
+                 style={{ background: "rgba(255,255,255,0.04)" }} />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(tickets ?? []).slice(0, 5).map((t) => (
+            <div
+              key={t.id}
+              className="flex items-start justify-between gap-3 rounded-xl px-3.5 py-3"
+              style={{
+                background: t.status === "open"
+                  ? "rgba(245,158,11,0.05)"
+                  : "rgba(255,255,255,0.03)",
+                border: t.status === "open"
+                  ? "1px solid rgba(245,158,11,0.15)"
+                  : "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <div className="min-w-0 flex-1">
+                <p
+                  className="text-xs leading-relaxed truncate"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  {t.summary}
+                </p>
+                {t.resolution && (
+                  <p className="text-[10px] mt-0.5 truncate" style={{ color: "#16A97B" }}>
+                    Reply: {t.resolution}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                  style={{
+                    background: t.status === "open" ? "rgba(245,158,11,0.15)" : "rgba(22,169,123,0.12)",
+                    color: t.status === "open" ? "#f59e0b" : "#16A97B",
+                  }}
+                >
+                  {t.status === "open" ? "Open" : "Resolved"}
+                </span>
+                <span
+                  className="text-[10px] flex items-center gap-1"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <Clock className="w-2.5 h-2.5" />
+                  {new Date(t.created_at).toLocaleDateString("en-NG", { day: "2-digit", month: "short" })}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
@@ -725,6 +863,9 @@ export function OverviewPage() {
               : <EmptyChart message="No data" />}
           </ChartPanel>
         </div>
+
+        {/* ── Support tickets widget ── */}
+        <SupportTicketsWidget />
 
       </div>
     </div>

@@ -22,7 +22,7 @@ import {
   XCircle, Copy, Check, ExternalLink,
   Ban, UserCheck, KeyRound, Edit3, X, Webhook, Activity,
   ChevronDown, ChevronUp, ChevronsRight, BookOpen, Terminal,
-  ServerCrash, Database, Cpu,
+  ServerCrash, Database, Cpu, Menu, MessageCircle, Ticket,
 } from "lucide-react";
 import { adminFetch } from "../lib/apiFetch.js";
 import { formatNaira } from "../lib/money.js";
@@ -97,7 +97,7 @@ interface ReconcileResult {
   summary?: string;
 }
 
-type NavSection = "overview" | "merchants" | "orders" | "reconcile" | "tools" | "webhooks" | "health" | "danger";
+type NavSection = "overview" | "merchants" | "orders" | "reconcile" | "tools" | "webhooks" | "health" | "support" | "danger";
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -1336,22 +1336,22 @@ function ToolsSection({ secret }: { secret: string }) {
 // ─── Section: Reconciliation ──────────────────────────────────────────────────
 
 function ReconciliationSection({ secret }: { secret: string }) {
-  const [dateRange, setDateRange] = React.useState({
-    from: new Date().toISOString().split("T")[0] ?? "",
-    to: new Date().toISOString().split("T")[0] ?? "",
-  });
-  const [result, setResult] = React.useState<ReconcileResult | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
+  const today = new Date().toISOString().split("T")[0] ?? "";
+  const [dateRange, setDateRange] = React.useState({ from: today, to: today });
+  const [result, setResult]       = React.useState<ReconcileResult | null>(null);
+  const [loading, setLoading]     = React.useState(false);
+  const [error, setError]         = React.useState("");
+  const [expandedOrphan, setExpandedOrphan] = React.useState<Record<string, boolean>>({});
 
-  async function runReconciliation() {
+  async function runCheck() {
     setLoading(true); setError(""); setResult(null);
     try {
       const params = new URLSearchParams();
       if (dateRange.from) params.append("date_from", dateRange.from);
-      if (dateRange.to) params.append("date_to", dateRange.to);
-
-      const res = await adminFetch<ReconcileResult>("GET", `/api/v1/admin/reconcile-check?${params.toString()}`, secret);
+      if (dateRange.to)   params.append("date_to",   dateRange.to);
+      const res = await adminFetch<ReconcileResult>(
+        "GET", `/api/v1/admin/reconcile-check?${params.toString()}`, secret
+      );
       setResult(res);
     } catch (e) {
       setError(String(e));
@@ -1360,93 +1360,345 @@ function ReconciliationSection({ secret }: { secret: string }) {
     }
   }
 
+  const totalIssues = (result?.orphans.length ?? 0) + (result?.drift.length ?? 0);
+  const isClean     = result !== null && totalIssues === 0 && (result.total_checked > 0 || result.matched === 0);
+  const isEmpty     = result !== null && result.total_checked === 0;
+
   return (
     <div>
-      <SectionHeader title="Reconciliation" subtitle="Compare local ledger with Nomba transactions" />
+      <SectionHeader
+        title="Reconciliation"
+        subtitle="Diff Nomba transactions against local ledger — runs nightly at 02:00 WAT"
+      />
 
-      <div className="rounded-xl p-4 mb-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <FieldInput
-            label="From Date"
-            value={dateRange.from}
-            onChange={(v) => setDateRange(prev => ({ ...prev, from: v }))}
-            type="date"
-            mono={false}
-          />
-          <FieldInput
-            label="To Date"
-            value={dateRange.to}
-            onChange={(v) => setDateRange(prev => ({ ...prev, to: v }))}
-            type="date"
-            mono={false}
-          />
-          <div className="flex items-end">
-            <ActionBtn onClick={() => void runReconciliation()} loading={loading}>
-              <GitCompare className="w-3 h-3" /> Run Check
-            </ActionBtn>
+      {/* ── Controls card ── */}
+      <div
+        className="rounded-xl p-5 mb-5"
+        style={{
+          background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+        }}
+      >
+        <p className="text-xs font-semibold mb-3" style={{ color: "var(--text-muted)" }}>
+          Date Range
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[140px]">
+            <FieldInput
+              label="From"
+              value={dateRange.from}
+              onChange={(v) => setDateRange((p) => ({ ...p, from: v }))}
+              type="date"
+              mono={false}
+            />
           </div>
+          <div className="flex-1 min-w-[140px]">
+            <FieldInput
+              label="To"
+              value={dateRange.to}
+              onChange={(v) => setDateRange((p) => ({ ...p, to: v }))}
+              type="date"
+              mono={false}
+            />
+          </div>
+          <ActionBtn onClick={() => void runCheck()} loading={loading}>
+            <GitCompare className="w-3.5 h-3.5" />
+            Run Reconciliation
+          </ActionBtn>
         </div>
 
-        {error && (
-          <div className="text-xs text-red-400 p-3 rounded-lg flex items-center gap-2 mb-3"
-               style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}
-          </div>
-        )}
+        {/* Inline cron note */}
+        <p className="text-[11px] mt-3 flex items-center gap-1.5" style={{ color: "rgba(100,116,139,0.7)" }}>
+          <Clock className="w-3 h-3 shrink-0" />
+          The nightly cron runs this same check automatically for the previous day. Use the controls above to check any date range on demand.
+        </p>
       </div>
 
-      {result && (
+      {/* ── Error ── */}
+      {error && (
+        <div
+          className="mb-5 flex items-center gap-2 text-xs text-red-400 p-3.5 rounded-xl"
+          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}
+        >
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {/* ── Loading skeleton ── */}
+      {loading && (
+        <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+          <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          Querying Nomba and local ledger…
+        </div>
+      )}
+
+      {/* ── Results ── */}
+      {result && !loading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <StatTile label="Total Checked" value={result.total_checked} />
-            <StatTile label="Matched" value={result.matched} accent="#22c55e" />
-            <StatTile 
-              label="Drift Issues" 
-              value={result.orphans.length + result.drift.length} 
-              accent={result.orphans.length + result.drift.length > 0 ? "#ef4444" : "#22c55e"} 
+
+          {/* Stat tiles */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatTile label="Nomba Transactions" value={result.total_checked} />
+            <StatTile label="Matched"             value={result.matched}       accent="#22c55e" />
+            <StatTile
+              label="Orphans"
+              value={result.orphans.length}
+              accent={result.orphans.length > 0 ? "#ef4444" : "#22c55e"}
+            />
+            <StatTile
+              label="Amount Drift"
+              value={result.drift.length}
+              accent={result.drift.length > 0 ? "#f59e0b" : "#22c55e"}
             />
           </div>
 
+          {/* Meta row */}
+          <div
+            className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] px-1"
+            style={{ color: "rgba(100,116,139,0.7)" }}
+          >
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Checked {new Date(result.checked_at).toLocaleString("en-NG")}
+            </span>
+            <span>
+              {result.date_from === result.date_to
+                ? `Date: ${result.date_from}`
+                : `Range: ${result.date_from} → ${result.date_to}`}
+            </span>
+          </div>
+
+          {/* ── All-clean banner ── */}
+          {isClean && (
+            <div
+              className="flex items-center gap-3 rounded-xl p-4"
+              style={{
+                background: "linear-gradient(135deg, rgba(22,169,123,0.10) 0%, rgba(22,169,123,0.04) 100%)",
+                border: "1px solid rgba(22,169,123,0.25)",
+                boxShadow: "inset 0 1px 0 rgba(22,169,123,0.08)",
+              }}
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(22,169,123,0.12)", border: "1px solid rgba(22,169,123,0.25)" }}
+              >
+                <CheckCircle2 className="w-4.5 h-4.5" style={{ color: "#16A97B" }} />
+              </div>
+              <div>
+                <p className="font-semibold text-sm" style={{ color: "#16A97B" }}>
+                  All transactions reconciled
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "rgba(22,169,123,0.7)" }}>
+                  {result.matched} Nomba transaction{result.matched !== 1 ? "s" : ""} matched local ledger entries — no drift detected.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── No transactions banner ── */}
+          {isEmpty && (
+            <div
+              className="flex items-center gap-3 rounded-xl p-4"
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(100,116,139,0.10)", border: "1px solid rgba(100,116,139,0.2)" }}
+              >
+                <Terminal className="w-4 h-4" style={{ color: "#64748b" }} />
+              </div>
+              <div>
+                <p className="font-semibold text-sm" style={{ color: "var(--text-secondary)" }}>
+                  No transactions in this period
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  Nomba returned zero successful transactions for {result.date_from}
+                  {result.date_from !== result.date_to ? ` – ${result.date_to}` : ""}.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Orphans ── */}
           {result.orphans.length > 0 && (
-            <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
-              <h3 className="font-semibold mb-3 text-red-400">Orphaned Transactions ({result.orphans.length})</h3>
-              <div className="space-y-2">
-                {result.orphans.map((orphan) => (
-                  <div key={orphan.transactionId} className="p-2 rounded text-xs font-mono"
-                       style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)" }}>
-                    <div className="flex justify-between">
-                      <span>{orphan.merchantTxRef}</span>
-                      <span>{formatNaira(orphan.amount_kobo)}</span>
-                    </div>
-                    <div className="text-red-300 text-[10px]">{orphan.transactionId}</div>
-                  </div>
-                ))}
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{
+                border: "1px solid rgba(239,68,68,0.25)",
+                background: "linear-gradient(135deg, rgba(239,68,68,0.06) 0%, rgba(239,68,68,0.02) 100%)",
+              }}
+            >
+              {/* Header */}
+              <div
+                className="flex items-center gap-3 px-5 py-3.5"
+                style={{ borderBottom: "1px solid rgba(239,68,68,0.15)" }}
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)" }}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-red-400">
+                    Orphaned Transactions ({result.orphans.length})
+                  </p>
+                  <p className="text-[11px]" style={{ color: "rgba(239,68,68,0.6)" }}>
+                    On Nomba but missing from local ledger — likely a dropped webhook.
+                    Use <span className="font-mono">Force Mark Paid</span> in Orders to resolve.
+                  </p>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ background: "rgba(239,68,68,0.06)", borderBottom: "1px solid rgba(239,68,68,0.12)" }}>
+                      {["Order Ref", "Transaction ID", "Amount", "Time on Nomba", ""].map((h) => (
+                        <th
+                          key={h}
+                          className="px-4 py-2.5 text-left font-semibold uppercase tracking-wide"
+                          style={{ color: "rgba(239,68,68,0.6)" }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.orphans.map((o) => (
+                      <React.Fragment key={o.transactionId}>
+                        <tr
+                          className="cursor-pointer transition-colors"
+                          style={{ borderTop: "1px solid rgba(239,68,68,0.10)" }}
+                          onClick={() =>
+                            setExpandedOrphan((p) => ({ ...p, [o.transactionId]: !p[o.transactionId] }))
+                          }
+                        >
+                          <td className="px-4 py-3 font-mono font-semibold" style={{ color: "#16A97B" }}>
+                            {o.merchantTxRef || "—"}
+                          </td>
+                          <td className="px-4 py-3 font-mono" style={{ color: "var(--text-muted)" }}>
+                            {o.transactionId ? `${o.transactionId.slice(0, 20)}…` : "—"}
+                          </td>
+                          <td className="px-4 py-3 font-mono font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                            {formatNaira(o.amount_kobo)}
+                          </td>
+                          <td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
+                            {o.created_at
+                              ? new Date(o.created_at).toLocaleString("en-NG", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            {expandedOrphan[o.transactionId]
+                              ? <ChevronUp className="w-3 h-3" style={{ color: "var(--text-muted)" }} />
+                              : <ChevronDown className="w-3 h-3" style={{ color: "var(--text-muted)" }} />}
+                          </td>
+                        </tr>
+                        {expandedOrphan[o.transactionId] && (
+                          <tr style={{ borderTop: "1px solid rgba(239,68,68,0.08)" }}>
+                            <td colSpan={5} className="px-4 py-3">
+                              <pre
+                                className="text-[10px] font-mono rounded-lg p-3 overflow-x-auto"
+                                style={{ background: "rgba(239,68,68,0.06)", color: "var(--text-secondary)", border: "1px solid rgba(239,68,68,0.12)" }}
+                              >
+                                {JSON.stringify(o, null, 2)}
+                              </pre>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
 
+          {/* ── Amount drift ── */}
           {result.drift.length > 0 && (
-            <div className="rounded-xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
-              <h3 className="font-semibold mb-3 text-yellow-400">Amount Drift ({result.drift.length})</h3>
-              <div className="space-y-2">
-                {result.drift.map((d) => (
-                  <div key={d.transactionId} className="p-2 rounded text-xs font-mono"
-                       style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.15)" }}>
-                    <div className="flex justify-between">
-                      <span>{d.order_ref}</span>
-                      <span>
-                        Nomba: {formatNaira(d.nomba_amount_kobo)} | Local: {formatNaira(d.local_amount_kobo)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{
+                border: "1px solid rgba(245,158,11,0.25)",
+                background: "linear-gradient(135deg, rgba(245,158,11,0.06) 0%, rgba(245,158,11,0.02) 100%)",
+              }}
+            >
+              {/* Header */}
+              <div
+                className="flex items-center gap-3 px-5 py-3.5"
+                style={{ borderBottom: "1px solid rgba(245,158,11,0.15)" }}
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.25)" }}
+                >
+                  <TrendingUp className="w-3.5 h-3.5 text-yellow-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-yellow-400">
+                    Amount Drift ({result.drift.length})
+                  </p>
+                  <p className="text-[11px]" style={{ color: "rgba(245,158,11,0.6)" }}>
+                    Transaction recorded locally but at a different amount than Nomba — investigate before any manual correction.
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
 
-          {result.summary && (
-            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{result.summary}</p>
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ background: "rgba(245,158,11,0.06)", borderBottom: "1px solid rgba(245,158,11,0.12)" }}>
+                      {["Order Ref", "Transaction ID", "Nomba Amount", "Local Amount", "Difference"].map((h) => (
+                        <th
+                          key={h}
+                          className="px-4 py-2.5 text-left font-semibold uppercase tracking-wide"
+                          style={{ color: "rgba(245,158,11,0.6)" }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.drift.map((d) => {
+                      const diff = d.nomba_amount_kobo - d.local_amount_kobo;
+                      return (
+                        <tr key={d.transactionId} style={{ borderTop: "1px solid rgba(245,158,11,0.10)" }}>
+                          <td className="px-4 py-3 font-mono font-semibold" style={{ color: "#16A97B" }}>
+                            {d.order_ref}
+                          </td>
+                          <td className="px-4 py-3 font-mono" style={{ color: "var(--text-muted)" }}>
+                            {d.transactionId ? `${d.transactionId.slice(0, 20)}…` : "—"}
+                          </td>
+                          <td className="px-4 py-3 font-mono tabular-nums" style={{ color: "var(--text-primary)" }}>
+                            {formatNaira(d.nomba_amount_kobo)}
+                          </td>
+                          <td className="px-4 py-3 font-mono tabular-nums" style={{ color: "var(--text-primary)" }}>
+                            {formatNaira(d.local_amount_kobo)}
+                          </td>
+                          <td
+                            className="px-4 py-3 font-mono font-bold tabular-nums"
+                            style={{ color: diff > 0 ? "#f59e0b" : "#ef4444" }}
+                          >
+                            {diff > 0 ? "+" : ""}{formatNaira(Math.abs(diff))}
+                            <span className="text-[10px] font-normal ml-1" style={{ color: "var(--text-muted)" }}>
+                              {diff > 0 ? "under-recorded" : "over-recorded"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1736,6 +1988,256 @@ function SystemHealthSection({ secret }: { secret: string }) {
   );
 }
 
+// ─── Section: Support Tickets ────────────────────────────────────────────────
+
+interface AdminSupportTicket {
+  id:         number;
+  merchant:   { id: string; name: string; email: string };
+  summary:    string;
+  status:     "open" | "resolved";
+  resolution: string | null;
+  messages:   Array<{ role: string; content: string }>;
+  created_at: string;
+  updated_at: string;
+}
+
+function SupportSection({ secret }: { secret: string }) {
+  const [tickets, setTickets]   = React.useState<AdminSupportTicket[] | null>(null);
+  const [total, setTotal]       = React.useState(0);
+  const [loading, setLoading]   = React.useState(false);
+  const [error, setError]       = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState<"" | "open" | "resolved">("");
+  const [expanded, setExpanded] = React.useState<Record<number, boolean>>({});
+  const [resolveModal, setResolveModal] = React.useState<AdminSupportTicket | null>(null);
+  const [resolutionNote, setResolutionNote] = React.useState("");
+  const [resolving, setResolving] = React.useState(false);
+  const [resolveResult, setResolveResult] = React.useState<PanelResult | null>(null);
+
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      const params = new URLSearchParams({ page_size: "50" });
+      if (statusFilter) params.append("status", statusFilter);
+      const res = await adminFetch<{ results: AdminSupportTicket[]; total_count: number }>(
+        "GET", `/api/v1/admin/support-tickets?${params.toString()}`, secret
+      );
+      setTickets(res.results);
+      setTotal(res.total_count);
+    } catch (e) { setError(String(e)); }
+    finally { setLoading(false); }
+  }
+
+  React.useEffect(() => { void load(); }, [statusFilter]);
+
+  async function resolveTicket() {
+    if (!resolveModal) return;
+    setResolving(true); setResolveResult(null);
+    try {
+      const data = await adminFetch(
+        "PATCH",
+        `/api/v1/admin/support-tickets/${resolveModal.id}/resolve`,
+        secret,
+        { note: resolutionNote.trim() || undefined }
+      );
+      setResolveResult({ ok: true, data });
+      setResolveModal(null);
+      setResolutionNote("");
+      await load();
+    } catch (e) {
+      setResolveResult({ ok: false, data: String(e) });
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  const openCount     = tickets?.filter((t) => t.status === "open").length ?? 0;
+
+  return (
+    <div>
+      <ConfirmModal
+        open={!!resolveModal}
+        title={`Resolve ticket #${resolveModal?.id ?? ""}?`}
+        message="Mark this ticket as resolved and optionally add a reply note the merchant will see."
+        confirmLabel="Mark Resolved"
+        loading={resolving}
+        onCancel={() => { setResolveModal(null); setResolutionNote(""); }}
+        onConfirm={() => void resolveTicket()}
+        extra={
+          <FieldInput
+            label="Reply / resolution note (optional)"
+            value={resolutionNote}
+            onChange={setResolutionNote}
+            placeholder="e.g. Your API key has been reset. Please re-issue from Settings."
+            mono={false}
+          />
+        }
+      />
+
+      <SectionHeader
+        title="Support Tickets"
+        subtitle={tickets ? `${total} total · ${openCount} open` : "Loading…"}
+        action={
+          <ActionBtn onClick={() => void load()} loading={loading} small>
+            <RefreshCw className="w-3 h-3" /> Refresh
+          </ActionBtn>
+        }
+      />
+
+      {error && (
+        <div className="mb-4 text-xs text-red-400 p-3 rounded-lg flex items-center gap-2"
+             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />{error}
+        </div>
+      )}
+
+      {resolveResult && <ResultBox result={resolveResult} />}
+
+      {/* Filter */}
+      <div className="flex gap-2 mb-4">
+        {([
+          { value: "" as const,         label: "All" },
+          { value: "open" as const,     label: "Open" },
+          { value: "resolved" as const, label: "Resolved" },
+        ]).map(({ value, label }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setStatusFilter(value)}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer"
+            style={{
+              background: statusFilter === value ? "rgba(22,169,123,0.15)" : "rgba(255,255,255,0.04)",
+              border: statusFilter === value ? "1px solid rgba(22,169,123,0.3)" : "1px solid rgba(255,255,255,0.08)",
+              color: statusFilter === value ? "#16A97B" : "var(--text-muted)",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading && !tickets && (
+        <div className="py-12 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+          <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          Loading tickets…
+        </div>
+      )}
+
+      {!loading && tickets && tickets.length === 0 && (
+        <div className="py-12 text-center" style={{ color: "var(--text-muted)" }}>
+          <Ticket className="w-8 h-8 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No {statusFilter || ""} support tickets.</p>
+        </div>
+      )}
+
+      {tickets && tickets.length > 0 && (
+        <div className="space-y-3">
+          {tickets.map((t) => (
+            <div
+              key={t.id}
+              className="rounded-xl overflow-hidden"
+              style={{
+                background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
+                border: t.status === "open"
+                  ? "1px solid rgba(245,158,11,0.25)"
+                  : "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {/* Ticket header */}
+              <button
+                type="button"
+                className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left cursor-pointer"
+                onClick={() => setExpanded((p) => ({ ...p, [t.id]: !p[t.id] }))}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                    style={{
+                      background: t.status === "open" ? "rgba(245,158,11,0.12)" : "rgba(22,169,123,0.10)",
+                      border: t.status === "open" ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(22,169,123,0.20)",
+                    }}
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" style={{ color: t.status === "open" ? "#f59e0b" : "#16A97B" }} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                        #{t.id} · {t.merchant.name}
+                      </span>
+                      <span
+                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                        style={{
+                          background: t.status === "open" ? "rgba(245,158,11,0.15)" : "rgba(22,169,123,0.12)",
+                          color: t.status === "open" ? "#f59e0b" : "#16A97B",
+                        }}
+                      >
+                        {t.status === "open" ? "Open" : "Resolved"}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
+                      {t.summary}
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                      {t.merchant.email} · {new Date(t.created_at).toLocaleString("en-NG", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {t.status === "open" && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setResolveModal(t); setResolutionNote(""); }}
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-semibold cursor-pointer transition-all"
+                      style={{ background: "rgba(22,169,123,0.12)", border: "1px solid rgba(22,169,123,0.25)", color: "#16A97B" }}
+                    >
+                      Resolve
+                    </button>
+                  )}
+                  {expanded[t.id] ? <ChevronUp className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} /> : <ChevronDown className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />}
+                </div>
+              </button>
+
+              {/* Expanded conversation */}
+              {expanded[t.id] && (
+                <div className="px-4 pb-4 space-y-2" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest pt-3 mb-2" style={{ color: "var(--text-muted)" }}>
+                    Conversation
+                  </p>
+                  {t.messages.map((m, i) => (
+                    <div key={i} className={`flex gap-2 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                      <div
+                        className="rounded-xl px-3 py-2 text-xs max-w-[80%]"
+                        style={{
+                          background: m.role === "user"
+                            ? "rgba(22,169,123,0.10)"
+                            : "rgba(255,255,255,0.04)",
+                          border: `1px solid ${m.role === "user" ? "rgba(22,169,123,0.2)" : "rgba(255,255,255,0.08)"}`,
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        <p className="text-[10px] font-semibold mb-0.5" style={{ color: "var(--text-muted)" }}>
+                          {m.role === "user" ? "Merchant" : "AI Assistant"}
+                        </p>
+                        {m.content}
+                      </div>
+                    </div>
+                  ))}
+                  {t.resolution && (
+                    <div className="mt-2 p-3 rounded-xl text-xs"
+                         style={{ background: "rgba(22,169,123,0.06)", border: "1px solid rgba(22,169,123,0.2)" }}>
+                      <p className="text-[10px] font-semibold mb-1" style={{ color: "#16A97B" }}>Team Reply</p>
+                      <p style={{ color: "var(--text-primary)" }}>{t.resolution}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Section: Danger Zone ─────────────────────────────────────────────────────
 
 function DangerSection({ secret }: { secret: string }) {
@@ -1809,8 +2311,23 @@ function DangerSection({ secret }: { secret: string }) {
 // ─── Main Admin Component ─────────────────────────────────────────────────────
 
 export function AdminPage() {
-  const [secret, setSecret] = React.useState<string | null>(null);
+  const [secret, setSecret]             = React.useState<string | null>(null);
   const [activeSection, setActiveSection] = React.useState<NavSection>("overview");
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+
+  // Close mobile nav on section change
+  function navigateTo(id: NavSection) {
+    setActiveSection(id);
+    setMobileNavOpen(false);
+  }
+
+  // Close on Escape
+  React.useEffect(() => {
+    if (!mobileNavOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileNavOpen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [mobileNavOpen]);
 
   if (!secret) {
     return <AdminLogin onAuth={setSecret} />;
@@ -1823,12 +2340,70 @@ export function AdminPage() {
     { id: "reconcile" as const, label: "Reconcile", icon: GitCompare,      component: ReconciliationSection },
     { id: "webhooks"  as const, label: "Webhooks",  icon: Webhook,         component: WebhookEventsSection  },
     { id: "health"    as const, label: "Health",    icon: Activity,        component: SystemHealthSection   },
-    { id: "tools"     as const, label: "Tools",     icon: Wrench,          component: ToolsSection     },
-    { id: "danger"    as const, label: "Danger",    icon: Trash2,          component: DangerSection    },
+    { id: "tools"     as const, label: "Tools",    icon: Wrench,          component: ToolsSection     },
+    { id: "support"   as const, label: "Support",  icon: MessageCircle,   component: SupportSection   },
+    { id: "danger"    as const, label: "Danger",   icon: Trash2,          component: DangerSection    },
   ];
 
   const ActiveComponent = sections.find(s => s.id === activeSection)?.component ?? OverviewSection;
   const activeLabel = sections.find(s => s.id === activeSection)?.label ?? "";
+
+  // Shared nav link renderer used in both sidebar and mobile drawer
+  function NavLinks() {
+    return (
+      <>
+        {sections.map((section) => {
+          const isActive = activeSection === section.id;
+          const isDanger = section.id === "danger";
+          return (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => navigateTo(section.id)}
+              className="relative flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer"
+              style={{
+                background: isActive
+                  ? isDanger
+                    ? "linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.08) 100%)"
+                    : "linear-gradient(135deg, rgba(22,169,123,0.20) 0%, rgba(22,169,123,0.08) 100%)"
+                  : "transparent",
+                color: isActive
+                  ? isDanger ? "#f87171" : "#16A97B"
+                  : isDanger ? "rgba(248,113,113,0.55)" : "var(--text-muted)",
+                border: isActive
+                  ? isDanger ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(22,169,123,0.25)"
+                  : "1px solid transparent",
+                boxShadow: isActive
+                  ? isDanger
+                    ? "0 2px 12px rgba(239,68,68,0.10)"
+                    : "0 2px 12px rgba(22,169,123,0.12), inset 0 1px 0 rgba(255,255,255,0.05)"
+                  : "none",
+              }}
+            >
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full"
+                      style={{
+                        background: isDanger
+                          ? "linear-gradient(180deg, #f87171, rgba(239,68,68,0.3))"
+                          : "linear-gradient(180deg, #16A97B, rgba(22,169,123,0.3))",
+                        boxShadow: isDanger ? "0 0 8px rgba(239,68,68,0.5)" : "0 0 8px rgba(22,169,123,0.6)",
+                      }} />
+              )}
+              <span className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md transition-all duration-200"
+                    style={{
+                      background: isActive
+                        ? isDanger ? "rgba(239,68,68,0.15)" : "rgba(22,169,123,0.15)"
+                        : "transparent",
+                    }}>
+                <section.icon className="w-3.5 h-3.5" />
+              </span>
+              {section.label}
+            </button>
+          );
+        })}
+      </>
+    );
+  }
 
   return (
     <div className="flex min-h-screen transition-colors duration-300"
@@ -1839,7 +2414,7 @@ export function AdminPage() {
            style={{ background: "radial-gradient(ellipse at 30% 40%, #16A97B 0%, transparent 70%)" }}
            aria-hidden />
 
-      {/* ── Sidebar ── */}
+      {/* ── Desktop sidebar ── */}
       <aside
         className="hidden md:flex flex-col w-60 shrink-0 fixed inset-y-0 left-0 z-30"
         style={{
@@ -1870,80 +2445,19 @@ export function AdminPage() {
           </span>
         </div>
 
-        {/* Nav section label */}
         <div className="px-5 pt-5 pb-2">
           <p className="text-[9px] font-bold uppercase tracking-[0.18em]"
              style={{ color: "rgba(100,116,139,0.7)" }}>Navigation</p>
         </div>
 
-        {/* Nav links */}
-        <nav className="flex-1 px-3 pb-4 space-y-0.5" aria-label="Admin navigation">
-          {sections.map((section) => {
-            const isActive = activeSection === section.id;
-            const isDanger = section.id === "danger";
-            return (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => setActiveSection(section.id)}
-                className="relative flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer"
-                style={{
-                  background: isActive
-                    ? isDanger
-                      ? "linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.08) 100%)"
-                      : "linear-gradient(135deg, rgba(22,169,123,0.20) 0%, rgba(22,169,123,0.08) 100%)"
-                    : "transparent",
-                  color: isActive
-                    ? isDanger ? "#f87171" : "#16A97B"
-                    : isDanger ? "rgba(248,113,113,0.55)" : "var(--text-muted)",
-                  border: isActive
-                    ? isDanger ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(22,169,123,0.25)"
-                    : "1px solid transparent",
-                  boxShadow: isActive
-                    ? isDanger
-                      ? "0 2px 12px rgba(239,68,68,0.10)"
-                      : "0 2px 12px rgba(22,169,123,0.12), inset 0 1px 0 rgba(255,255,255,0.05)"
-                    : "none",
-                  textShadow: isActive
-                    ? isDanger ? "0 0 16px rgba(239,68,68,0.4)" : "0 0 16px rgba(22,169,123,0.5)"
-                    : "none",
-                }}
-              >
-                {/* Active left indicator bar */}
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full"
-                        style={{
-                          background: isDanger
-                            ? "linear-gradient(180deg, #f87171, rgba(239,68,68,0.3))"
-                            : "linear-gradient(180deg, #16A97B, rgba(22,169,123,0.3))",
-                          boxShadow: isDanger ? "0 0 8px rgba(239,68,68,0.5)" : "0 0 8px rgba(22,169,123,0.6)",
-                        }} />
-                )}
-                {/* Icon */}
-                <span className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md transition-all duration-200"
-                      style={{
-                        background: isActive
-                          ? isDanger ? "rgba(239,68,68,0.15)" : "rgba(22,169,123,0.15)"
-                          : "transparent",
-                        boxShadow: isActive
-                          ? isDanger ? "0 0 8px rgba(239,68,68,0.2)" : "0 0 8px rgba(22,169,123,0.2)"
-                          : "none",
-                      }}>
-                  <section.icon className="w-3.5 h-3.5" />
-                </span>
-                {section.label}
-              </button>
-            );
-          })}
+        <nav className="flex-1 px-3 pb-4 space-y-0.5 overflow-y-auto" aria-label="Admin navigation">
+          <NavLinks />
         </nav>
 
-        {/* Divider */}
         <div className="mx-4 h-px"
              style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent)" }} />
 
-        {/* Footer */}
         <div className="px-3 py-4 space-y-1">
-          {/* Session chip */}
           <div className="flex items-center gap-2 mx-1 mb-2 px-3 py-2 rounded-xl"
                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
             <span className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse"
@@ -1952,8 +2466,6 @@ export function AdminPage() {
               admin session active
             </span>
           </div>
-
-          {/* Sign out */}
           <button
             type="button"
             onClick={() => setSecret(null)}
@@ -1978,27 +2490,103 @@ export function AdminPage() {
         </div>
       </aside>
 
+      {/* ── Mobile nav drawer ── */}
+      {mobileNavOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 md:hidden"
+            style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)" }}
+            onClick={() => setMobileNavOpen(false)}
+            aria-hidden
+          />
+          {/* Drawer panel */}
+          <div
+            className="fixed left-0 top-0 bottom-0 z-50 flex flex-col w-72 md:hidden"
+            style={{
+              background: "linear-gradient(180deg, rgba(15,23,42,0.99) 0%, rgba(10,14,20,0.99) 100%)",
+              borderRight: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "8px 0 32px rgba(0,0,0,0.5)",
+            }}
+          >
+            {/* Drawer header */}
+            <div className="flex items-center justify-between px-5 py-4"
+                 style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                     style={{ background: "rgba(22,169,123,0.15)", border: "1px solid rgba(22,169,123,0.3)" }}>
+                  <Shield className="w-3.5 h-3.5" style={{ color: "#16A97B" }} />
+                </div>
+                <div>
+                  <p className="font-bold text-sm leading-none" style={{ color: "var(--text-primary)" }}>Admin Panel</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: "rgba(100,116,139,0.7)" }}>NairaRails Internal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "var(--text-muted)" }}
+                aria-label="Close navigation"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Nav links */}
+            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" aria-label="Admin navigation">
+              <NavLinks />
+            </nav>
+
+            {/* Drawer footer */}
+            <div className="px-3 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <button
+                type="button"
+                onClick={() => setSecret(null)}
+                className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm font-medium transition-all cursor-pointer text-red-400"
+                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ── Main content ── */}
       <main className="flex-1 md:ml-60 min-h-screen pb-8">
-        {/* Top bar */}
-        <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-3"
+        {/* Top bar — desktop shows section title + restricted badge; mobile shows hamburger */}
+        <div className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-6 py-3"
              style={{
-               background: "rgba(10,14,20,0.85)",
+               background: "rgba(10,14,20,0.90)",
                backdropFilter: "blur(16px)",
                WebkitBackdropFilter: "blur(16px)",
                borderBottom: "1px solid rgba(255,255,255,0.06)",
              }}>
-          <div>
-            <h1 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{activeLabel}</h1>
-            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>NairaRails Admin · Internal Ops</p>
+          <div className="flex items-center gap-3">
+            {/* Hamburger — mobile only */}
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "var(--text-secondary)" }}
+              aria-label="Open navigation"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            <div>
+              <h1 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{activeLabel}</h1>
+              <p className="text-[10px] hidden sm:block" style={{ color: "var(--text-muted)" }}>NairaRails Admin · Internal Ops</p>
+            </div>
           </div>
           <span className="text-[10px] font-semibold px-2 py-1 rounded-lg"
                 style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}>
-            Restricted Access
+            Restricted
           </span>
         </div>
 
-        <div className="p-6 max-w-6xl">
+        <div className="p-4 md:p-6 max-w-6xl">
           <ActiveComponent secret={secret} />
         </div>
       </main>
