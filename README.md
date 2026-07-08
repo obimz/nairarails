@@ -48,6 +48,20 @@ No spreadsheets. No batch jobs. No Monday morning surprises.
 
 ---
 
+## Test Credentials
+
+For judges/testers who want to log in directly instead of signing up:
+
+| Field | Value |
+|-------|-------|
+| Email | `favitech009@gmail.com` |
+| Password | `Favour2009##` |
+| API Key | `nrk_live_b0a7f4934cfe33a4bbf67153879972457c3bf19993f342882cdc877d6160a758` |
+
+Use the API Key in the `x-api-key` header for direct API calls, or log in with the email/password at `/login` to access the merchant dashboard.
+
+---
+
 ## Architecture
 
 ```
@@ -95,7 +109,6 @@ Turborepo enforces build order via `"dependsOn": ["^build"]` — shared packages
 | ORM | Prisma |
 | Auth | Supabase Auth (email/password + JWT) |
 | Frontend | React + Vite, TanStack Query, Tailwind CSS, Recharts |
-| 3D Landing | Three.js + React Three Fiber + GSAP + ScrollTrigger |
 | Payments | Nomba Virtual Account API + Transfers v2 + Webhooks |
 | AI Support | Gemini 2.5 Flash (tool-calling, 7 live-data tools) |
 | Rate Limiting | express-rate-limit + Redis |
@@ -267,24 +280,6 @@ The merchant dashboard provides:
 - **Per-order reconciliation drawer** — full audit trail (ledger entries, splits, webhook events)
 - **Auto-refresh** — dashboard every 15s, exceptions every 15s
 - **AI-generated reports** on demand via support chat — collection rate, daily trend, top payers
-
----
-
-## Scroll-Driven 3D Landing Page
-
-The marketing page (`/`) is a seven-act scroll narrative built on a fixed WebGL canvas — **Three.js + React Three Fiber + GSAP ScrollTrigger**. A single `scrollProgress` value (0–1) drives camera position, material colors, and geometry visibility with zero per-frame DOM cost:
-
-| Act | Scroll | What happens |
-|-----|--------|-------------|
-| 1 Chaos | 0–20% | Red payment lines pile into a single bottleneck node |
-| 2 Problem | 20–40% | A line glitches; Naira glyph appears |
-| 3 Turn | 40–60% | Chaos snaps into clean parallel rails with NUBAN labels |
-| 4 Solution | 60–75% | Green pulse splits into seller, platform, rider |
-| 5 Proof | 75–90% | Camera pans to align rails with the dashboard mockup |
-| 6 Trust | 90–95% | Tech-grid overlay maps HMAC and idempotency log lines |
-| 7 Close | 95–100% | Full reconciled network with the NairaRails logo |
-
-Post-processing bloom keeps the rendering crisp; CanvasTexture labels avoid per-frame DOM queries. GSAP's ScrollTrigger writes a shared ref that React Three Fiber reads inside `useFrame` — no React re-renders per scroll event.
 
 ---
 
