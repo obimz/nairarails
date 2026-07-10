@@ -56,7 +56,7 @@ For judges/testers who want to log in directly instead of signing up:
 |-------|-------|
 | Email | `favitech009@gmail.com` |
 | Password | `Favour2009##` |
-| API Key | `nrk_live_b0a7f4934cfe33a4bbf67153879972457c3bf19993f342882cdc877d6160a758` |
+| API Key | `nrk_live_cbc26c4a3daf5b02abaab1e3d8ceac67557cc9535f1cfc5048bb3849396df672` |
 
 Use the API Key in the `x-api-key` header for direct API calls, or log in with the email/password at `/login` to access the merchant dashboard.
 
