@@ -395,7 +395,7 @@ export interface ListTransactionsParams {
 export interface NombaTransaction {
   transactionId:  string; // always "" when absent — mapping provides fallback
   merchantTxRef:  string;
-  amount:         number; // kobo — always 0 when absent
+  amount:         number; // NAIRA (Nomba always returns naira) — convert ×100 for kobo comparisons
   status:         string;
   type:           string;
   createdAt:      string;

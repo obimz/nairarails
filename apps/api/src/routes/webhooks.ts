@@ -102,7 +102,7 @@ router.post(
         event_type,
         transactionId:         txn.transactionId,
         transactionType:       txn.type,
-        amount_kobo:           txn.transactionAmount,
+        amount_naira:          txn.transactionAmount,
         aliasAccountReference: txn.aliasAccountReference,
       },
       "Nomba webhook received"
@@ -167,7 +167,8 @@ router.post(
       }
 
       const expectedKobo = Number(order.expectedAmountKobo);
-      const receivedKobo = txn.transactionAmount;
+      // Nomba sends transactionAmount in NAIRA — convert to kobo before classification.
+      const receivedKobo = Math.round(txn.transactionAmount * 100);
 
       const classification = classify(expectedKobo, receivedKobo);
       const shortfall      = shortfallKobo(expectedKobo, receivedKobo);

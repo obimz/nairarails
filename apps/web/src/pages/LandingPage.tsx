@@ -197,6 +197,7 @@ function LiveMockDashboard() {
 export function LandingPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = React.useState<"hmac" | "idempotency" | "lookup">("hmac");
+  const [menuOpen, setMenuOpen] = React.useState(false);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
@@ -209,11 +210,14 @@ export function LandingPage() {
       {/* ── Header ───────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 w-full backdrop-blur-md"
               style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-glass)" }}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 md:px-8 py-4">
-          <div className="flex items-center gap-2.5">
-            <LogoLockup size={32} textSize="text-lg" />
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 md:px-8 py-3">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <LogoLockup size={28} textSize="text-base" />
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Desktop nav */}
+          <div className="hidden xs:flex items-center gap-2 sm:gap-3">
             <ThemeToggle />
             <button type="button" onClick={() => navigate("/docs")}
               className="text-sm font-medium transition-colors duration-150 px-3 py-2 rounded-lg"
@@ -223,11 +227,57 @@ export function LandingPage() {
               Docs
             </button>
             <button type="button" onClick={() => navigate("/signup")}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#16A97B] hover:bg-[#128a64] text-black font-semibold rounded-xl text-sm transition-all duration-200 shadow-lg shadow-emerald-500/20">
-              Get API Access <ArrowRight className="w-4 h-4" />
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#16A97B] hover:bg-[#128a64] text-black font-semibold rounded-xl text-sm transition-all duration-200 shadow-lg shadow-emerald-500/20 whitespace-nowrap">
+              Get API Access <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Mobile nav — ThemeToggle + hamburger */}
+          <div className="flex xs:hidden items-center gap-2">
+            <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setMenuOpen((x) => !x)}
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              className="w-9 h-9 flex flex-col items-center justify-center gap-[5px] rounded-xl transition-colors"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+            >
+              <span className="w-4 h-[1.5px] rounded-full transition-all duration-200"
+                    style={{
+                      background: "var(--text-secondary)",
+                      transform: menuOpen ? "translateY(6.5px) rotate(45deg)" : "none",
+                    }} />
+              <span className="w-4 h-[1.5px] rounded-full transition-all duration-200"
+                    style={{
+                      background: "var(--text-secondary)",
+                      opacity: menuOpen ? 0 : 1,
+                    }} />
+              <span className="w-4 h-[1.5px] rounded-full transition-all duration-200"
+                    style={{
+                      background: "var(--text-secondary)",
+                      transform: menuOpen ? "translateY(-6.5px) rotate(-45deg)" : "none",
+                    }} />
             </button>
           </div>
         </div>
+
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <div
+            className="xs:hidden px-4 pb-4 flex flex-col gap-2"
+            style={{ borderTop: "1px solid var(--border)" }}
+          >
+            <button type="button" onClick={() => { navigate("/docs"); setMenuOpen(false); }}
+              className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-colors"
+              style={{ color: "var(--text-secondary)", background: "var(--bg-elevated)" }}>
+              Docs
+            </button>
+            <button type="button" onClick={() => { navigate("/signup"); setMenuOpen(false); }}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#16A97B] hover:bg-[#128a64] text-black font-semibold rounded-xl text-sm transition-all duration-200">
+              Get API Access <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-20 md:space-y-28 pb-24">

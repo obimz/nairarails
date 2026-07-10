@@ -36,7 +36,7 @@ function renderMarkdown(text: string): React.ReactNode {
       if (part.startsWith("`") && part.endsWith("`")) {
         return (
           <code key={i} className="px-1 py-0.5 rounded text-[10px] font-mono"
-                style={{ background: "rgba(255,255,255,0.08)", color: "#16A97B" }}>
+                style={{ background: "var(--bg-elevated)", color: "var(--text-brand)" }}>
             {part.slice(1, -1)}
           </code>
         );
@@ -121,12 +121,12 @@ function ToolCallBadges({ toolCalls }: { toolCalls: Array<{ tool: string; result
   if (!toolCalls.length) return null;
 
   return (
-    <div className="mt-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+    <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--border)" }}>
       <button
         type="button"
         onClick={() => setExpanded((x) => !x)}
         className="flex items-center gap-1.5 text-[10px] cursor-pointer transition-opacity hover:opacity-70"
-        style={{ color: "rgba(100,116,139,0.7)" }}
+        style={{ color: "var(--text-muted)" }}
       >
         <Wrench className="w-2.5 h-2.5" />
         {toolCalls.length} tool{toolCalls.length > 1 ? "s" : ""} used
@@ -145,9 +145,9 @@ function ToolCallBadges({ toolCalls }: { toolCalls: Array<{ tool: string; result
                 key={i}
                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-medium"
                 style={{
-                  background: "rgba(22,169,123,0.08)",
-                  border:     "1px solid rgba(22,169,123,0.15)",
-                  color:      "rgba(22,169,123,0.8)",
+                  background: "rgba(22,169,123,0.10)",
+                  border:     "1px solid rgba(22,169,123,0.20)",
+                  color:      "var(--text-brand)",
                 }}
               >
                 <Icon className="w-2 h-2" />
@@ -300,8 +300,8 @@ function TicketList() {
             style={{
               background: t.status === "open"
                 ? "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.03) 100%)"
-                : "rgba(255,255,255,0.03)",
-              border: `1px solid ${t.status === "open" ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.07)"}`,
+                : "var(--bg-elevated)",
+              border: `1px solid ${t.status === "open" ? "rgba(245,158,11,0.25)" : "var(--border)"}`,
             }}
           >
             {/* Header row — click to expand */}
@@ -360,8 +360,8 @@ function TicketList() {
                       rows={2}
                       className="w-full rounded-lg px-2.5 py-2 text-xs resize-none outline-none"
                       style={{
-                        background: "rgba(255,255,255,0.05)",
-                        border:     "1px solid rgba(255,255,255,0.12)",
+                        background: "var(--bg-base)",
+                        border:     "1px solid var(--border)",
                         color:      "var(--text-primary)",
                       }}
                       disabled={replying === t.id}
@@ -562,9 +562,9 @@ export function SupportChat() {
             bottom: "76px",
             width: "360px",
             height: "520px",
-            background: "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(10,14,20,0.98) 100%)",
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border)",
+            boxShadow: "var(--shadow-card)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
             // Animation: slide up + fade in
@@ -583,7 +583,7 @@ export function SupportChat() {
           {/* ── Header ── */}
           <div
             className="flex items-center justify-between px-4 py-3 shrink-0"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="flex items-center gap-2.5">
               <div
@@ -607,7 +607,7 @@ export function SupportChat() {
                   type="button"
                   onClick={reset}
                   className="px-2 py-1 rounded-lg text-[10px] font-medium transition-colors cursor-pointer"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-muted)" }}
+                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
                 >
                   New chat
                 </button>
@@ -616,7 +616,7 @@ export function SupportChat() {
                 type="button"
                 onClick={closeChat}
                 className="w-7 h-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70 cursor-pointer"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-muted)" }}
+                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
                 aria-label="Close chat"
               >
                 <X className="w-3.5 h-3.5" />
@@ -627,7 +627,7 @@ export function SupportChat() {
           {/* ── Tabs ── */}
           <div
             className="flex shrink-0 px-3 pt-2 pb-0 gap-1"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
             {([
               { id: "chat"    as const, label: "Chat",       icon: MessageCircle },
@@ -677,11 +677,11 @@ export function SupportChat() {
                       style={{
                         background: msg.role === "user"
                           ? "rgba(22,169,123,0.15)"
-                          : msg.escalated ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.06)",
+                          : msg.escalated ? "rgba(245,158,11,0.15)" : "var(--bg-elevated)",
                         border: `1px solid ${
                           msg.role === "user"
                             ? "rgba(22,169,123,0.3)"
-                            : msg.escalated ? "rgba(245,158,11,0.3)" : "rgba(255,255,255,0.10)"
+                            : msg.escalated ? "rgba(245,158,11,0.3)" : "var(--border)"
                         }`,
                       }}
                     >
@@ -700,11 +700,11 @@ export function SupportChat() {
                           ? "linear-gradient(135deg, rgba(22,169,123,0.20) 0%, rgba(22,169,123,0.12) 100%)"
                           : msg.escalated
                             ? "linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0.06) 100%)"
-                            : "rgba(255,255,255,0.05)",
+                            : "var(--bg-elevated)",
                         border: `1px solid ${
                           msg.role === "user"
                             ? "rgba(22,169,123,0.25)"
-                            : msg.escalated ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.08)"
+                            : msg.escalated ? "rgba(245,158,11,0.25)" : "var(--border)"
                         }`,
                         color: "var(--text-primary)",
                         borderTopRightRadius: msg.role === "user" ? "4px" : undefined,
@@ -716,8 +716,7 @@ export function SupportChat() {
                         <div
                           className="flex items-center gap-1.5 mt-2 pt-2 text-[10px] font-semibold"
                           style={{ borderTop: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b" }}
-                        >
-                          <CheckCircle2 className="w-3 h-3" />
+                        >                          <CheckCircle2 className="w-3 h-3" />
                           Ticket created — check the Tickets tab
                         </div>
                       )}
@@ -733,13 +732,13 @@ export function SupportChat() {
                   <div className="flex gap-2.5">
                     <div
                       className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
+                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                     >
                       <Bot className="w-3 h-3" style={{ color: "var(--text-muted)" }} />
                     </div>
                     <div
                       className="rounded-2xl rounded-tl-[4px] px-4 py-3 flex items-center gap-1"
-                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                     >
                       {[0, 1, 2].map((d) => (
                         <span
@@ -762,7 +761,7 @@ export function SupportChat() {
               {escalated && (
                 <div
                   className="shrink-0 px-4 py-3 text-center"
-                  style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
+                  style={{ borderTop: "1px solid var(--border)" }}
                 >
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                     Our team has been notified and will follow up via email.
@@ -776,7 +775,7 @@ export function SupportChat() {
                     >
                       New conversation
                     </button>
-                    <span style={{ color: "rgba(100,116,139,0.4)" }}>·</span>
+                    <span style={{ color: "var(--border)" }}>·</span>
                     <button
                       type="button"
                       onClick={() => setTab("tickets")}
@@ -793,11 +792,11 @@ export function SupportChat() {
               {!escalated && (
                 <div
                   className="shrink-0 px-3 py-3"
-                  style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
+                  style={{ borderTop: "1px solid var(--border)" }}
                 >
                   <div
                     className="flex items-end gap-2 rounded-xl px-3 py-2"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}
+                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                   >
                     <textarea
                       ref={inputRef}
@@ -820,13 +819,13 @@ export function SupportChat() {
                       onClick={() => void send()}
                       disabled={!input.trim() || loading}
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                      style={{ background: "rgba(22,169,123,0.15)", border: "1px solid rgba(22,169,123,0.3)", color: "#16A97B" }}
+                      style={{ background: "rgba(22,169,123,0.15)", border: "1px solid rgba(22,169,123,0.3)", color: "var(--text-brand)" }}
                       aria-label="Send message"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <p className="text-[10px] mt-1.5 text-center" style={{ color: "rgba(100,116,139,0.5)" }}>
+                  <p className="text-[10px] mt-1.5 text-center" style={{ color: "var(--text-muted)" }}>
                     Enter to send · Shift+Enter for new line
                   </p>
                 </div>

@@ -88,25 +88,29 @@ export async function runReconciliation(dateFrom: string, dateTo: string): Promi
   for (const tx of transactions) {
     const local = localByRef.get(tx.transactionId);
 
+    // Nomba returns amounts in NAIRA — convert to kobo for comparison against
+    // our ledger which stores everything in kobo.
+    const nombaAmountKobo = Math.round(tx.amount * 100);
+
     if (!local) {
       // Nomba processed this payment but we have no ledger entry for it.
       // Most likely cause: the webhook fired but our server was down or it was dropped.
       orphans.push({
         transactionId: tx.transactionId,
         merchantTxRef: tx.merchantTxRef,
-        amountKobo:    tx.amount,
+        amountKobo:    nombaAmountKobo,
         createdAt:     tx.createdAt,
       });
       continue;
     }
 
     const localKobo = Math.abs(Number(local.amountKobo));
-    if (localKobo !== tx.amount) {
+    if (localKobo !== nombaAmountKobo) {
       // We recorded the payment but at a different amount — data integrity issue.
       drift.push({
         transactionId:   tx.transactionId,
         merchantTxRef:   tx.merchantTxRef,
-        nombaAmountKobo: tx.amount,
+        nombaAmountKobo: nombaAmountKobo,
         localAmountKobo: localKobo,
         orderRef:        local.orderRef,
       });
