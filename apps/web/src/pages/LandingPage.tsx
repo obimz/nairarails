@@ -470,23 +470,24 @@ export function LandingPage() {
 
 
         {/* ══════════════════════════════════════════════════════════════════
-            ENGINEERING RELIABILITY
+            TRUST & RELIABILITY
         ══════════════════════════════════════════════════════════════════ */}
         <section className="space-y-8">
           <FadeSection className="text-center max-w-2xl mx-auto space-y-4">
-            <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Security & Reliability</p>
-            <h2 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Engineering-first infrastructure</h2>
+            <p className="text-xs font-mono font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Built for money you can't afford to lose</p>
+            <h2 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Every kobo is accounted for.</h2>
             <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              Every decision in the stack was made with financial correctness in mind.
+              NairaRails is built on the assumption that payment infrastructure never gets a second
+              chance. Every safeguard exists to protect your funds and your customers' trust.
             </p>
           </FadeSection>
 
           <FadeSection className="max-w-3xl mx-auto">
             <div className="flex overflow-x-auto" style={{ borderBottom: "1px solid var(--border)" }} role="tablist">
               {([
-                { id: "hmac",        label: "HMAC Signatures",   icon: Shield },
-                { id: "idempotency", label: "Idempotency",        icon: Key },
-                { id: "lookup",      label: "Lookup Verification",icon: Search },
+                { id: "hmac",        label: "Verified Payments",   icon: Shield },
+                { id: "idempotency", label: "No Double Charges",    icon: Key    },
+                { id: "lookup",      label: "Safe Transfers",       icon: Search },
               ] as const).map(({ id, label, icon: Icon }) => (
                 <button key={id} type="button"
                   onClick={() => setActiveTab(id)}
@@ -502,46 +503,97 @@ export function LandingPage() {
               ))}
             </div>
 
-            <div className="rounded-b-2xl p-6 min-h-[220px]"
+            <div className="rounded-b-2xl p-6 min-h-[180px]"
                  style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderTop: "none" }}>
               {activeTab === "hmac" && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>HMAC-SHA256 Webhook Verification</h4>
-                  <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                    Every inbound Nomba webhook is verified before any business logic runs. We build a
-                    colon-joined string from nine event fields and compute HMAC-SHA256 with your
-                    NOMBA_WEBHOOK_SECRET. Timing-safe comparison — never a string equality check.
-                  </p>
-                  <div className="rounded-xl overflow-x-auto" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
-                    <pre className="p-4 text-[11px] font-mono leading-relaxed" style={{ color: "var(--text-brand)" }}>{`const payload = [\n  event_type, requestId,\n  merchant.userId, merchant.walletId,\n  transaction.transactionId, transaction.type,\n  transaction.time, transaction.responseCode ?? "",\n  headers["nomba-timestamp"]\n].join(":");\n\nconst expected = crypto\n  .createHmac("sha256", NOMBA_WEBHOOK_SECRET)\n  .update(payload)\n  .digest("base64");\n\ncrypto.timingSafeEqual(\n  Buffer.from(expected),\n  Buffer.from(headers["nomba-signature"])\n);`}</pre>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                         style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.20)" }}>
+                      <Shield className="w-4 h-4" style={{ color: "var(--text-brand)" }} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Only real Nomba payments trigger your splits</h4>
+                      <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                        Every payment notification is cryptographically verified as genuine before
+                        NairaRails acts on it. Spoofed or tampered notifications are silently rejected —
+                        no splits fire, no ledger moves, no false confirmations reach your customers.
+                      </p>
+                    </div>
                   </div>
+                  <ul className="space-y-2 text-xs pl-12">
+                    {[
+                      "Forged payment webhooks can't trigger a payout",
+                      "Tampered amounts are caught before any money moves",
+                      "Your webhook secret is stored separately from your API key",
+                    ].map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "var(--text-brand)" }} />
+                        <span style={{ color: "var(--text-secondary)" }}>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               {activeTab === "idempotency" && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>DB-Level Idempotency</h4>
-                  <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                    Nomba may fire the same webhook twice. A unique constraint on
-                    webhook_events.request_id means the second delivery hits the constraint and
-                    returns 200 immediately — the split never fires twice, no money moves twice.
-                  </p>
-                  <div className="rounded-xl overflow-x-auto" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
-                    <pre className="p-4 text-[11px] font-mono leading-relaxed" style={{ color: "var(--text-brand)" }}>{`// Database constraint — idempotency key\nUNIQUE CONSTRAINT webhook_events.request_id\n\n// Handler logic:\nconst existing = await prisma.webhookEvent\n  .findUnique({ where: { requestId } });\n\nif (existing) {\n  return res.status(200).json({\n    status: "duplicate_ignored"\n  });\n}\n\n// First delivery only: insert then process`}</pre>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                         style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.20)" }}>
+                      <Key className="w-4 h-4" style={{ color: "var(--text-brand)" }} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>One payment. One payout. Always.</h4>
+                      <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                        Payment networks sometimes deliver the same notification twice. NairaRails
+                        recognises duplicates instantly and discards them — your seller, platform, and
+                        rider are never paid twice for the same order, even under network retries.
+                      </p>
+                    </div>
                   </div>
+                  <ul className="space-y-2 text-xs pl-12">
+                    {[
+                      "Duplicate payment events are silently ignored",
+                      "Splits never execute twice for the same payment",
+                      "Works across concurrent requests — no race conditions",
+                    ].map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "var(--text-brand)" }} />
+                        <span style={{ color: "var(--text-secondary)" }}>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               {activeTab === "lookup" && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Lookup Before Every Transfer</h4>
-                  <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                    Before any split transfer, NairaRails calls Nomba's account lookup API to resolve
-                    the account name. Sending to a wrong NUBAN can be irreversible — the verified
-                    name is confirmed before any money moves. A failed lookup marks the split failed,
-                    never silently credits the wrong account.
-                  </p>
-                  <div className="rounded-xl overflow-x-auto" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
-                    <pre className="p-4 text-[11px] font-mono leading-relaxed" style={{ color: "var(--text-brand)" }}>{`// POST /v1/transfers/bank/lookup\nconst { accountName } = await lookupBankAccount({\n  bankCode:      split.bank_code,\n  accountNumber: split.account_number,\n});\n// accountName confirmed → safe to transfer\n\n// POST /v2/transfers/bank/{subAccountId}\nawait transferToBank({\n  amountKobo:    split.amount_kobo,\n  accountName,   // from lookup — not user input\n  merchantTxRef: \`split_\${orderRef}_\${party}\`,\n});`}</pre>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                         style={{ background: "rgba(22,169,123,0.10)", border: "1px solid rgba(22,169,123,0.20)" }}>
+                      <Search className="w-4 h-4" style={{ color: "var(--text-brand)" }} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Every recipient verified before money moves</h4>
+                      <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                        Before any split transfer leaves your account, NairaRails confirms the
+                        recipient bank account exists and matches the expected name. A wrong account
+                        number is caught before the transfer — not after. Funds never disappear into
+                        an unverified account.
+                      </p>
+                    </div>
                   </div>
+                  <ul className="space-y-2 text-xs pl-12">
+                    {[
+                      "Typos in account numbers are caught at order creation",
+                      "Failed verifications block the transfer and flag the exception",
+                      "Overpayment refunds go back to the exact account that paid",
+                    ].map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "var(--text-brand)" }} />
+                        <span style={{ color: "var(--text-secondary)" }}>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
